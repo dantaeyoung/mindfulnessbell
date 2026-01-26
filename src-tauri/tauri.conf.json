@@ -12,10 +12,6 @@
   "app": {
     "withGlobalTauri": true,
     "macOSPrivateApi": true,
-    "trayIcon": {
-      "iconPath": "icons/tray-bell.png",
-      "iconAsTemplate": true
-    },
     "windows": [],
     "security": {
       "csp": null

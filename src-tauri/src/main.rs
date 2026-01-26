@@ -460,6 +460,8 @@ fn main() {
             let separator1 = PredefinedMenuItem::separator(app)?;
             let test_bell =
                 MenuItem::with_id(app, "test_bell", "Test Bell", true, None::<&str>)?;
+            let test_5sec =
+                MenuItem::with_id(app, "test_5sec", "Test in 5 seconds", true, None::<&str>)?;
             let separator2 = PredefinedMenuItem::separator(app)?;
             let quit =
                 MenuItem::with_id(app, "quit", "Quit Mindfulness Bell", true, None::<&str>)?;
@@ -467,7 +469,7 @@ fn main() {
             // Build the tray menu
             let menu = Menu::with_items(
                 app,
-                &[&settings_menu, &separator1, &test_bell, &separator2, &quit],
+                &[&settings_menu, &separator1, &test_bell, &test_5sec, &separator2, &quit],
             )?;
 
             // Load the initial tray icon based on persisted enabled state
@@ -489,6 +491,14 @@ fn main() {
                     }
                     "test_bell" => {
                         trigger_bell(app);
+                    }
+                    "test_5sec" => {
+                        // Trigger bell in 5 seconds
+                        let app_handle = app.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_secs(5));
+                            trigger_bell(&app_handle);
+                        });
                     }
                     _ => {}
                 })
