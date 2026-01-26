@@ -493,11 +493,11 @@ fn main() {
                         trigger_bell(app);
                     }
                     "test_5sec" => {
-                        // Trigger bell in 5 seconds
+                        // Trigger bell in 5 seconds using event system (like scheduler)
                         let app_handle = app.clone();
                         std::thread::spawn(move || {
                             std::thread::sleep(std::time::Duration::from_secs(5));
-                            trigger_bell(&app_handle);
+                            let _ = app_handle.emit("trigger-bell", ());
                         });
                     }
                     _ => {}
