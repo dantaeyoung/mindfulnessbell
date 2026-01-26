@@ -1,8 +1,13 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use rodio::{Decoder, OutputStream, Sink};
 use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::io::{BufReader, Cursor};
+use std::path::Path;
 use std::sync::{atomic::{AtomicBool, Ordering}, Mutex};
+use std::thread;
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -10,6 +15,9 @@ use tauri::{
     AppHandle, Manager,
 };
 use tauri_plugin_store::StoreExt;
+
+// Default bell sound embedded in the binary
+const DEFAULT_BELL_SOUND: &[u8] = include_bytes!("../sounds/bell.aiff");
 
 // Global state for bell enabled status
 static BELL_ENABLED: AtomicBool = AtomicBool::new(true);
@@ -137,6 +145,54 @@ fn update_tray_icon(app: &AppHandle, enabled: bool) {
     }
 }
 
+/// Play a sound file with the given volume (0.0 to 1.0)
+fn play_sound_with_volume(sound_data: Vec<u8>, volume: f32) -> Result<(), String> {
+    thread::spawn(move || {
+        let (_stream, stream_handle) = OutputStream::try_default()
+            .map_err(|e| format!("Failed to get audio output stream: {}", e))?;
+
+        let sink = Sink::try_new(&stream_handle)
+            .map_err(|e| format!("Failed to create audio sink: {}", e))?;
+
+        let cursor = Cursor::new(sound_data);
+        let source = Decoder::new(cursor)
+            .map_err(|e| format!("Failed to decode audio: {}", e))?;
+
+        sink.set_volume(volume);
+        sink.append(source);
+        sink.sleep_until_end();
+
+        Ok::<(), String>(())
+    });
+
+    Ok(())
+}
+
+/// Play the bell sound using current settings
+#[tauri::command]
+fn play_bell(state: tauri::State<'_, SettingsState>) -> Result<(), String> {
+    let settings = state.0.lock().map_err(|e| e.to_string())?;
+    let volume = settings.volume as f32;
+    let custom_path = settings.custom_sound_path.clone();
+    drop(settings); // Release lock before potentially long I/O operation
+
+    let sound_data = if !custom_path.is_empty() && Path::new(&custom_path).exists() {
+        // Try to load custom sound file
+        let file = File::open(&custom_path)
+            .map_err(|e| format!("Failed to open custom sound file: {}", e))?;
+        let mut reader = BufReader::new(file);
+        let mut data = Vec::new();
+        std::io::Read::read_to_end(&mut reader, &mut data)
+            .map_err(|e| format!("Failed to read custom sound file: {}", e))?;
+        data
+    } else {
+        // Use default embedded sound
+        DEFAULT_BELL_SOUND.to_vec()
+    };
+
+    play_sound_with_volume(sound_data, volume)
+}
+
 /// Open or focus the settings window
 fn open_settings_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("settings") {
@@ -162,7 +218,7 @@ fn main() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(SettingsState(Mutex::new(Settings::default())))
-        .invoke_handler(tauri::generate_handler![get_settings, save_settings])
+        .invoke_handler(tauri::generate_handler![get_settings, save_settings, play_bell])
         .setup(|app| {
             // Load settings from store on startup
             let loaded_settings = load_settings_from_store(app.handle());
@@ -210,8 +266,30 @@ fn main() {
                         open_settings_window(app);
                     }
                     "test_bell" => {
-                        // Placeholder - will be wired up in a later task
-                        println!("Test bell triggered!");
+                        let state = app.state::<SettingsState>();
+                        let settings = state.0.lock().unwrap();
+                        let volume = settings.volume as f32;
+                        let custom_path = settings.custom_sound_path.clone();
+                        drop(settings);
+
+                        let sound_data = if !custom_path.is_empty() && Path::new(&custom_path).exists() {
+                            match File::open(&custom_path) {
+                                Ok(file) => {
+                                    let mut reader = BufReader::new(file);
+                                    let mut data = Vec::new();
+                                    if std::io::Read::read_to_end(&mut reader, &mut data).is_ok() {
+                                        data
+                                    } else {
+                                        DEFAULT_BELL_SOUND.to_vec()
+                                    }
+                                }
+                                Err(_) => DEFAULT_BELL_SOUND.to_vec(),
+                            }
+                        } else {
+                            DEFAULT_BELL_SOUND.to_vec()
+                        };
+
+                        let _ = play_sound_with_volume(sound_data, volume);
                     }
                     _ => {}
                 })
