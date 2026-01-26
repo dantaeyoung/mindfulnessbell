@@ -301,6 +301,27 @@
             background: rgba(255, 69, 58, 0.1);
         }
 
+        /* Test Bell button */
+        .btn-test {
+            background: linear-gradient(180deg, #34c759 0%, #28a745 100%);
+            color: white;
+            width: 100%;
+            padding: 14px 20px;
+            font-size: 15px;
+            font-weight: 600;
+            border-radius: 10px;
+            margin-top: 8px;
+        }
+
+        .btn-test:hover {
+            background: linear-gradient(180deg, #40d466 0%, #34c759 100%);
+        }
+
+        .btn-test:active {
+            background: linear-gradient(180deg, #28a745 0%, #1e7e34 100%);
+            transform: scale(0.98);
+        }
+
         /* Status message */
         .status {
             font-size: 12px;
@@ -414,6 +435,11 @@
             </div>
         </div>
 
+        <!-- Test Bell Button -->
+        <div class="setting-group">
+            <button class="btn btn-test" id="testBellBtn">Test Bell</button>
+        </div>
+
         <div class="status" id="status">Settings will be saved automatically</div>
     </div>
 
@@ -436,6 +462,7 @@
         const chooseSoundBtn = document.getElementById('chooseSoundBtn');
         const resetSoundBtn = document.getElementById('resetSoundBtn');
         const soundFilename = document.getElementById('soundFilename');
+        const testBellBtn = document.getElementById('testBellBtn');
 
         // Current settings object
         let currentSettings = {
@@ -587,6 +614,21 @@
             currentSettings.customSoundPath = '';
             updateSoundDisplay();
             debouncedSave();
+        });
+
+        // Test Bell button - triggers both sound and overlay
+        testBellBtn.addEventListener('click', async () => {
+            try {
+                // Trigger both sound and overlay in parallel
+                await Promise.all([
+                    invoke('play_bell'),
+                    invoke('show_overlay')
+                ]);
+                showStatus('Bell triggered!', 'success');
+            } catch (error) {
+                console.error('Failed to trigger bell:', error);
+                showStatus('Failed to trigger bell', 'error');
+            }
         });
 
         // Load settings when page loads
