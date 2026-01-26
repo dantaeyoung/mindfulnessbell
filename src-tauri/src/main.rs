@@ -22,7 +22,7 @@ use tauri::{
 use tauri_plugin_store::StoreExt;
 
 // Default bell sound embedded in the binary
-const DEFAULT_BELL_SOUND: &[u8] = include_bytes!("../sounds/bell.aiff");
+const DEFAULT_BELL_SOUND: &[u8] = include_bytes!("../sounds/bell.mp3");
 
 // Counter for unique overlay window IDs
 static OVERLAY_COUNTER: AtomicUsize = AtomicUsize::new(0);
