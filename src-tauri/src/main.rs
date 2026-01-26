@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::{BufReader, Cursor};
 use std::path::Path;
 use std::sync::{
-    atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
+    atomic::{AtomicU64, AtomicUsize, Ordering},
     Mutex,
 };
 use std::thread;
@@ -23,9 +23,6 @@ use tauri_plugin_store::StoreExt;
 
 // Default bell sound embedded in the binary
 const DEFAULT_BELL_SOUND: &[u8] = include_bytes!("../sounds/bell.aiff");
-
-// Global state for bell enabled status
-static BELL_ENABLED: AtomicBool = AtomicBool::new(true);
 
 // Counter for unique overlay window IDs
 static OVERLAY_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -176,6 +173,16 @@ fn seconds_until_next_aligned_trigger(interval_minutes: i32) -> u64 {
     }
 }
 
+/// Check if bell is enabled from settings state
+fn is_bell_enabled(app: &AppHandle) -> bool {
+    let state = app.state::<SettingsState>();
+    let result = match state.0.lock() {
+        Ok(settings) => settings.is_enabled,
+        Err(_) => false,
+    };
+    result
+}
+
 /// Start the bell scheduler
 /// The scheduler runs in a background thread and triggers the bell at configured intervals
 fn start_scheduler(app: AppHandle) {
@@ -190,8 +197,8 @@ fn start_scheduler(app: AppHandle) {
                 return;
             }
 
-            // Check if bell is enabled
-            if !BELL_ENABLED.load(Ordering::SeqCst) {
+            // Check if bell is enabled (read from settings state)
+            if !is_bell_enabled(&app) {
                 // Bell is disabled, sleep and check again
                 thread::sleep(Duration::from_secs(1));
                 continue;
@@ -202,7 +209,8 @@ fn start_scheduler(app: AppHandle) {
                 let state = app.state::<SettingsState>();
                 let settings = match state.0.lock() {
                     Ok(s) => s,
-                    Err(_) => {
+                    Err(e) => {
+                        eprintln!("Failed to lock settings: {}", e);
                         thread::sleep(Duration::from_secs(1));
                         continue;
                     }
@@ -228,7 +236,7 @@ fn start_scheduler(app: AppHandle) {
                 }
 
                 // Check if bell was disabled
-                if !BELL_ENABLED.load(Ordering::SeqCst) {
+                if !is_bell_enabled(&app) {
                     break;
                 }
 
@@ -241,7 +249,7 @@ fn start_scheduler(app: AppHandle) {
                 return;
             }
 
-            if !BELL_ENABLED.load(Ordering::SeqCst) {
+            if !is_bell_enabled(&app) {
                 continue;
             }
 
@@ -251,49 +259,24 @@ fn start_scheduler(app: AppHandle) {
     });
 }
 
-/// Trigger the bell: play sound and show overlay
-fn trigger_bell(app: &AppHandle) {
-    let state = app.state::<SettingsState>();
-    let settings = match state.0.lock() {
-        Ok(s) => s.clone(),
-        Err(_) => return,
-    };
-
-    // Play the bell sound
-    let sound_data = if !settings.custom_sound_path.is_empty()
-        && Path::new(&settings.custom_sound_path).exists()
-    {
-        match File::open(&settings.custom_sound_path) {
-            Ok(file) => {
-                let mut reader = BufReader::new(file);
-                let mut data = Vec::new();
-                if std::io::Read::read_to_end(&mut reader, &mut data).is_ok() {
-                    data
-                } else {
-                    DEFAULT_BELL_SOUND.to_vec()
-                }
-            }
-            Err(_) => DEFAULT_BELL_SOUND.to_vec(),
+/// Create overlay windows on all monitors with the given opacity and duration
+fn create_overlay_windows(app: &AppHandle, opacity: f64, duration: f64) {
+    let monitors = match app.available_monitors() {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Failed to get monitors: {}", e);
+            return;
         }
-    } else {
-        DEFAULT_BELL_SOUND.to_vec()
     };
 
-    let _ = play_sound_with_volume(sound_data, settings.volume as f32);
-
-    // Show the overlay on all monitors
-    let monitors = app.available_monitors().unwrap_or_default();
     for monitor in monitors {
         let counter = OVERLAY_COUNTER.fetch_add(1, Ordering::SeqCst);
         let window_label = format!("overlay-{}", counter);
         let position = monitor.position();
         let size = monitor.size();
-        let url = format!(
-            "overlay.html?opacity={}&duration={}",
-            settings.opacity, settings.duration_seconds
-        );
+        let url = format!("overlay.html?opacity={}&duration={}", opacity, duration);
 
-        if let Ok(window) = tauri::WebviewWindowBuilder::new(
+        match tauri::WebviewWindowBuilder::new(
             app,
             &window_label,
             tauri::WebviewUrl::App(url.into()),
@@ -311,12 +294,57 @@ fn trigger_bell(app: &AppHandle) {
         .visible(true)
         .build()
         {
-            let _ = window.set_ignore_cursor_events(true);
-            let _ = window.set_position(PhysicalPosition::new(position.x, position.y));
-            let _ = window.set_size(PhysicalSize::new(size.width, size.height));
-            let _ = window.set_visible_on_all_workspaces(true);
+            Ok(window) => {
+                let _ = window.set_ignore_cursor_events(true);
+                let _ = window.set_position(PhysicalPosition::new(position.x, position.y));
+                let _ = window.set_size(PhysicalSize::new(size.width, size.height));
+                let _ = window.set_visible_on_all_workspaces(true);
+            }
+            Err(e) => {
+                eprintln!("Failed to create overlay window: {}", e);
+            }
         }
     }
+}
+
+/// Load sound data from the given path, or fall back to default bell sound
+fn load_sound_data(custom_path: &str) -> Vec<u8> {
+    if !custom_path.is_empty() && Path::new(custom_path).exists() {
+        match File::open(custom_path) {
+            Ok(file) => {
+                let mut reader = BufReader::new(file);
+                let mut data = Vec::new();
+                if std::io::Read::read_to_end(&mut reader, &mut data).is_ok() {
+                    return data;
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to open custom sound file: {}", e);
+            }
+        }
+    }
+    DEFAULT_BELL_SOUND.to_vec()
+}
+
+/// Trigger the bell: play sound and show overlay
+fn trigger_bell(app: &AppHandle) {
+    let state = app.state::<SettingsState>();
+    let settings = match state.0.lock() {
+        Ok(s) => s.clone(),
+        Err(e) => {
+            eprintln!("Failed to lock settings: {}", e);
+            return;
+        }
+    };
+
+    // Play the bell sound
+    let sound_data = load_sound_data(&settings.custom_sound_path);
+    if let Err(e) = play_sound_with_volume(sound_data, settings.volume as f32) {
+        eprintln!("Failed to play bell sound: {}", e);
+    }
+
+    // Show the overlay on all monitors
+    create_overlay_windows(app, settings.opacity, settings.duration_seconds);
 }
 
 /// Load the appropriate tray icon based on enabled state
@@ -331,7 +359,6 @@ fn load_tray_icon(enabled: bool) -> Image<'static> {
 
 /// Update the tray icon based on current enabled state
 fn update_tray_icon(app: &AppHandle, enabled: bool) {
-    BELL_ENABLED.store(enabled, Ordering::SeqCst);
     if let Some(tray) = app.tray_by_id("main-tray") {
         let icon = load_tray_icon(enabled);
         let _ = tray.set_icon(Some(icon));
@@ -369,20 +396,7 @@ fn play_bell(state: tauri::State<'_, SettingsState>) -> Result<(), String> {
     let custom_path = settings.custom_sound_path.clone();
     drop(settings); // Release lock before potentially long I/O operation
 
-    let sound_data = if !custom_path.is_empty() && Path::new(&custom_path).exists() {
-        // Try to load custom sound file
-        let file = File::open(&custom_path)
-            .map_err(|e| format!("Failed to open custom sound file: {}", e))?;
-        let mut reader = BufReader::new(file);
-        let mut data = Vec::new();
-        std::io::Read::read_to_end(&mut reader, &mut data)
-            .map_err(|e| format!("Failed to read custom sound file: {}", e))?;
-        data
-    } else {
-        // Use default embedded sound
-        DEFAULT_BELL_SOUND.to_vec()
-    };
-
+    let sound_data = load_sound_data(&custom_path);
     play_sound_with_volume(sound_data, volume)
 }
 
@@ -394,52 +408,7 @@ fn show_overlay(app: AppHandle, state: tauri::State<'_, SettingsState>) -> Resul
     let duration = settings.duration_seconds;
     drop(settings);
 
-    // Get all available monitors
-    let monitors = app.available_monitors().map_err(|e| e.to_string())?;
-
-    for monitor in monitors {
-        let counter = OVERLAY_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let window_label = format!("overlay-{}", counter);
-
-        // Get monitor position and size
-        let position = monitor.position();
-        let size = monitor.size();
-
-        // Create the URL with query parameters for opacity and duration
-        let url = format!("overlay.html?opacity={}&duration={}", opacity, duration);
-
-        // Create fullscreen overlay window on this monitor
-        let window_result = tauri::WebviewWindowBuilder::new(
-            &app,
-            &window_label,
-            tauri::WebviewUrl::App(url.into()),
-        )
-        .title("")
-        .inner_size(size.width as f64, size.height as f64)
-        .position(position.x as f64, position.y as f64)
-        .decorations(false)
-        .transparent(true)
-        .always_on_top(true)
-        .visible_on_all_workspaces(true)
-        .skip_taskbar(true)
-        .resizable(false)
-        .focused(false)
-        .visible(true)
-        .build();
-
-        if let Ok(window) = window_result {
-            // Set window to ignore mouse events (click-through)
-            let _ = window.set_ignore_cursor_events(true);
-
-            // Set the window to exact position and size after creation
-            let _ = window.set_position(PhysicalPosition::new(position.x, position.y));
-            let _ = window.set_size(PhysicalSize::new(size.width, size.height));
-
-            // Ensure the overlay stays visible on all workspaces
-            let _ = window.set_visible_on_all_workspaces(true);
-        }
-    }
-
+    create_overlay_windows(&app, opacity, duration);
     Ok(())
 }
 
@@ -484,9 +453,6 @@ fn main() {
             if let Ok(mut settings) = state.0.lock() {
                 *settings = loaded_settings.clone();
             }
-
-            // Update the global enabled flag
-            BELL_ENABLED.store(loaded_settings.is_enabled, Ordering::SeqCst);
 
             // Create menu items
             let settings_menu =
@@ -534,10 +500,8 @@ fn main() {
                 trigger_bell(&app_handle);
             });
 
-            // Start the scheduler if bell is enabled
-            if loaded_settings.is_enabled {
-                start_scheduler(app.handle().clone());
-            }
+            // Always start the scheduler - it handles enabled state internally
+            start_scheduler(app.handle().clone());
 
             Ok(())
         })
