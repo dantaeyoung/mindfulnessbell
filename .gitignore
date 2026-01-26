@@ -1,0 +1,25 @@
+# Rust / Cargo
+/src-tauri/target/
+/src-tauri/gen/
+**/*.rs.bk
+
+# Node
+node_modules/
+
+# Build output
+/dist-tauri/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
