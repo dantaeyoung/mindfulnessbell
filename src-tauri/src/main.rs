@@ -1,21 +1,23 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use chrono::{Local, Timelike};
 use rodio::{Decoder, OutputStream, Sink};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, Cursor};
 use std::path::Path;
 use std::sync::{
-    atomic::{AtomicBool, AtomicUsize, Ordering},
+    atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     Mutex,
 };
 use std::thread;
+use std::time::Duration;
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager, PhysicalPosition, PhysicalSize,
+    AppHandle, Emitter, Listener, Manager, PhysicalPosition, PhysicalSize,
 };
 use tauri_plugin_store::StoreExt;
 
@@ -27,6 +29,9 @@ static BELL_ENABLED: AtomicBool = AtomicBool::new(true);
 
 // Counter for unique overlay window IDs
 static OVERLAY_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+// Scheduler version - incremented when settings change to restart scheduler
+static SCHEDULER_VERSION: AtomicU64 = AtomicU64::new(0);
 
 // Settings store filename
 const SETTINGS_FILE: &str = "settings.json";
@@ -88,13 +93,16 @@ fn save_settings(
     // Persist to store
     let store = app.store(SETTINGS_FILE).map_err(|e| e.to_string())?;
     store.set("isEnabled", settings.is_enabled);
-    store.set("timingMode", settings.timing_mode);
+    store.set("timingMode", settings.timing_mode.clone());
     store.set("intervalMinutes", settings.interval_minutes);
     store.set("opacity", settings.opacity);
     store.set("durationSeconds", settings.duration_seconds);
     store.set("volume", settings.volume);
-    store.set("customSoundPath", settings.custom_sound_path);
+    store.set("customSoundPath", settings.custom_sound_path.clone());
     store.save().map_err(|e| e.to_string())?;
+
+    // Restart the scheduler to pick up new settings
+    start_scheduler(app.clone());
 
     Ok(())
 }
@@ -129,6 +137,185 @@ fn load_settings_from_store(app: &AppHandle) -> Settings {
         custom_sound_path: store.get("customSoundPath")
             .and_then(|v| v.as_str().map(|s| s.to_string()))
             .unwrap_or_default(),
+    }
+}
+
+/// Calculate seconds until the next clock-aligned bell trigger
+/// For clock-aligned mode, we trigger at :00, :15, :30, :45 (based on interval)
+fn seconds_until_next_aligned_trigger(interval_minutes: i32) -> u64 {
+    let now = Local::now();
+    let current_minute = now.minute() as i32;
+    let current_second = now.second() as i32;
+
+    // Find the next trigger minute based on interval
+    // With 15-min interval: triggers at 0, 15, 30, 45
+    // With 30-min interval: triggers at 0, 30
+    // With 60-min interval: triggers at 0 only
+    let next_trigger_minute = if interval_minutes >= 60 {
+        // Next hour
+        60
+    } else {
+        // Find next aligned minute
+        let mut next = ((current_minute / interval_minutes) + 1) * interval_minutes;
+        if next > 59 {
+            next = 60; // Will wrap to next hour
+        }
+        next
+    };
+
+    // Calculate seconds until next trigger
+    let minutes_to_wait = next_trigger_minute - current_minute;
+    let seconds_to_wait = (minutes_to_wait * 60) - current_second;
+
+    // Ensure we always wait at least 1 second
+    if seconds_to_wait <= 0 {
+        // If we're exactly on the trigger minute:second, wait for the next interval
+        (interval_minutes * 60) as u64
+    } else {
+        seconds_to_wait as u64
+    }
+}
+
+/// Start the bell scheduler
+/// The scheduler runs in a background thread and triggers the bell at configured intervals
+fn start_scheduler(app: AppHandle) {
+    // Increment version to invalidate any existing scheduler
+    let version = SCHEDULER_VERSION.fetch_add(1, Ordering::SeqCst) + 1;
+
+    thread::spawn(move || {
+        loop {
+            // Check if this scheduler is still valid
+            if SCHEDULER_VERSION.load(Ordering::SeqCst) != version {
+                // A new scheduler has been started, exit this one
+                return;
+            }
+
+            // Check if bell is enabled
+            if !BELL_ENABLED.load(Ordering::SeqCst) {
+                // Bell is disabled, sleep and check again
+                thread::sleep(Duration::from_secs(1));
+                continue;
+            }
+
+            // Get current settings
+            let (timing_mode, interval_minutes) = {
+                let state = app.state::<SettingsState>();
+                let settings = match state.0.lock() {
+                    Ok(s) => s,
+                    Err(_) => {
+                        thread::sleep(Duration::from_secs(1));
+                        continue;
+                    }
+                };
+                (settings.timing_mode.clone(), settings.interval_minutes)
+            };
+
+            // Calculate sleep duration based on timing mode
+            let sleep_seconds = if timing_mode == "clock-aligned" {
+                seconds_until_next_aligned_trigger(interval_minutes)
+            } else {
+                // Fixed interval mode: just use the interval
+                (interval_minutes * 60) as u64
+            };
+
+            // Sleep in small increments to allow for settings changes and version checks
+            let sleep_end = std::time::Instant::now() + Duration::from_secs(sleep_seconds);
+
+            while std::time::Instant::now() < sleep_end {
+                // Check if scheduler version changed
+                if SCHEDULER_VERSION.load(Ordering::SeqCst) != version {
+                    return;
+                }
+
+                // Check if bell was disabled
+                if !BELL_ENABLED.load(Ordering::SeqCst) {
+                    break;
+                }
+
+                // Sleep for 1 second at a time
+                thread::sleep(Duration::from_secs(1));
+            }
+
+            // Double-check conditions before triggering
+            if SCHEDULER_VERSION.load(Ordering::SeqCst) != version {
+                return;
+            }
+
+            if !BELL_ENABLED.load(Ordering::SeqCst) {
+                continue;
+            }
+
+            // Trigger the bell by emitting an event
+            let _ = app.emit("trigger-bell", ());
+        }
+    });
+}
+
+/// Trigger the bell: play sound and show overlay
+fn trigger_bell(app: &AppHandle) {
+    let state = app.state::<SettingsState>();
+    let settings = match state.0.lock() {
+        Ok(s) => s.clone(),
+        Err(_) => return,
+    };
+
+    // Play the bell sound
+    let sound_data = if !settings.custom_sound_path.is_empty()
+        && Path::new(&settings.custom_sound_path).exists()
+    {
+        match File::open(&settings.custom_sound_path) {
+            Ok(file) => {
+                let mut reader = BufReader::new(file);
+                let mut data = Vec::new();
+                if std::io::Read::read_to_end(&mut reader, &mut data).is_ok() {
+                    data
+                } else {
+                    DEFAULT_BELL_SOUND.to_vec()
+                }
+            }
+            Err(_) => DEFAULT_BELL_SOUND.to_vec(),
+        }
+    } else {
+        DEFAULT_BELL_SOUND.to_vec()
+    };
+
+    let _ = play_sound_with_volume(sound_data, settings.volume as f32);
+
+    // Show the overlay on all monitors
+    let monitors = app.available_monitors().unwrap_or_default();
+    for monitor in monitors {
+        let counter = OVERLAY_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let window_label = format!("overlay-{}", counter);
+        let position = monitor.position();
+        let size = monitor.size();
+        let url = format!(
+            "overlay.html?opacity={}&duration={}",
+            settings.opacity, settings.duration_seconds
+        );
+
+        if let Ok(window) = tauri::WebviewWindowBuilder::new(
+            app,
+            &window_label,
+            tauri::WebviewUrl::App(url.into()),
+        )
+        .title("")
+        .inner_size(size.width as f64, size.height as f64)
+        .position(position.x as f64, position.y as f64)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .visible_on_all_workspaces(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .focused(false)
+        .visible(true)
+        .build()
+        {
+            let _ = window.set_ignore_cursor_events(true);
+            let _ = window.set_position(PhysicalPosition::new(position.x, position.y));
+            let _ = window.set_size(PhysicalSize::new(size.width, size.height));
+            let _ = window.set_visible_on_all_workspaces(true);
+        }
     }
 }
 
@@ -335,71 +522,22 @@ fn main() {
                         open_settings_window(app);
                     }
                     "test_bell" => {
-                        let state = app.state::<SettingsState>();
-                        let settings = state.0.lock().unwrap();
-                        let volume = settings.volume as f32;
-                        let custom_path = settings.custom_sound_path.clone();
-                        let opacity = settings.opacity;
-                        let duration = settings.duration_seconds;
-                        drop(settings);
-
-                        // Play the bell sound
-                        let sound_data = if !custom_path.is_empty() && Path::new(&custom_path).exists() {
-                            match File::open(&custom_path) {
-                                Ok(file) => {
-                                    let mut reader = BufReader::new(file);
-                                    let mut data = Vec::new();
-                                    if std::io::Read::read_to_end(&mut reader, &mut data).is_ok() {
-                                        data
-                                    } else {
-                                        DEFAULT_BELL_SOUND.to_vec()
-                                    }
-                                }
-                                Err(_) => DEFAULT_BELL_SOUND.to_vec(),
-                            }
-                        } else {
-                            DEFAULT_BELL_SOUND.to_vec()
-                        };
-
-                        let _ = play_sound_with_volume(sound_data, volume);
-
-                        // Show the overlay on all monitors
-                        let monitors = app.available_monitors().unwrap_or_default();
-                        for monitor in monitors {
-                            let counter = OVERLAY_COUNTER.fetch_add(1, Ordering::SeqCst);
-                            let window_label = format!("overlay-{}", counter);
-                            let position = monitor.position();
-                            let size = monitor.size();
-                            let url = format!("overlay.html?opacity={}&duration={}", opacity, duration);
-
-                            if let Ok(window) = tauri::WebviewWindowBuilder::new(
-                                app,
-                                &window_label,
-                                tauri::WebviewUrl::App(url.into()),
-                            )
-                            .title("")
-                            .inner_size(size.width as f64, size.height as f64)
-                            .position(position.x as f64, position.y as f64)
-                            .decorations(false)
-                            .transparent(true)
-                            .always_on_top(true)
-                            .visible_on_all_workspaces(true)
-                            .skip_taskbar(true)
-                            .resizable(false)
-                            .focused(false)
-                            .visible(true)
-                            .build()
-                            {
-                                let _ = window.set_ignore_cursor_events(true);
-                                let _ = window.set_position(PhysicalPosition::new(position.x, position.y));
-                                let _ = window.set_size(PhysicalSize::new(size.width, size.height));
-                                let _ = window.set_visible_on_all_workspaces(true);
-                            }
-                        }
+                        trigger_bell(app);
                     }
                     _ => {}
                 })
                 .build(app)?;
+
+            // Set up event listener for trigger-bell events from the scheduler
+            let app_handle = app.handle().clone();
+            app.listen("trigger-bell", move |_| {
+                trigger_bell(&app_handle);
+            });
+
+            // Start the scheduler if bell is enabled
+            if loaded_settings.is_enabled {
+                start_scheduler(app.handle().clone());
+            }
 
             Ok(())
         })
