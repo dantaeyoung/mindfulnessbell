@@ -6,13 +6,16 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, Cursor};
 use std::path::Path;
-use std::sync::{atomic::{AtomicBool, Ordering}, Mutex};
+use std::sync::{
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    Mutex,
+};
 use std::thread;
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager,
+    AppHandle, Manager, PhysicalPosition, PhysicalSize,
 };
 use tauri_plugin_store::StoreExt;
 
@@ -21,6 +24,9 @@ const DEFAULT_BELL_SOUND: &[u8] = include_bytes!("../sounds/bell.aiff");
 
 // Global state for bell enabled status
 static BELL_ENABLED: AtomicBool = AtomicBool::new(true);
+
+// Counter for unique overlay window IDs
+static OVERLAY_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 // Settings store filename
 const SETTINGS_FILE: &str = "settings.json";
@@ -193,6 +199,69 @@ fn play_bell(state: tauri::State<'_, SettingsState>) -> Result<(), String> {
     play_sound_with_volume(sound_data, volume)
 }
 
+/// Show fullscreen overlay on all monitors
+#[tauri::command]
+fn show_overlay(app: AppHandle, state: tauri::State<'_, SettingsState>) -> Result<(), String> {
+    let settings = state.0.lock().map_err(|e| e.to_string())?;
+    let opacity = settings.opacity;
+    let duration = settings.duration_seconds;
+    drop(settings);
+
+    // Get all available monitors
+    let monitors = app.available_monitors().map_err(|e| e.to_string())?;
+
+    for monitor in monitors {
+        let counter = OVERLAY_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let window_label = format!("overlay-{}", counter);
+
+        // Get monitor position and size
+        let position = monitor.position();
+        let size = monitor.size();
+
+        // Create the URL with query parameters for opacity and duration
+        let url = format!("overlay.html?opacity={}&duration={}", opacity, duration);
+
+        // Create fullscreen overlay window on this monitor
+        let window_result = tauri::WebviewWindowBuilder::new(
+            &app,
+            &window_label,
+            tauri::WebviewUrl::App(url.into()),
+        )
+        .title("")
+        .inner_size(size.width as f64, size.height as f64)
+        .position(position.x as f64, position.y as f64)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .visible_on_all_workspaces(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .focused(false)
+        .visible(true)
+        .build();
+
+        if let Ok(window) = window_result {
+            // Set window to ignore mouse events (click-through)
+            let _ = window.set_ignore_cursor_events(true);
+
+            // Set the window to exact position and size after creation
+            let _ = window.set_position(PhysicalPosition::new(position.x, position.y));
+            let _ = window.set_size(PhysicalSize::new(size.width, size.height));
+
+            // Ensure the overlay stays visible on all workspaces
+            let _ = window.set_visible_on_all_workspaces(true);
+        }
+    }
+
+    Ok(())
+}
+
+/// Close an overlay window (called from JS when animation completes)
+#[tauri::command]
+fn close_overlay_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.close().map_err(|e| e.to_string())
+}
+
 /// Open or focus the settings window
 fn open_settings_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("settings") {
@@ -218,7 +287,7 @@ fn main() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(SettingsState(Mutex::new(Settings::default())))
-        .invoke_handler(tauri::generate_handler![get_settings, save_settings, play_bell])
+        .invoke_handler(tauri::generate_handler![get_settings, save_settings, play_bell, show_overlay, close_overlay_window])
         .setup(|app| {
             // Load settings from store on startup
             let loaded_settings = load_settings_from_store(app.handle());
@@ -270,8 +339,11 @@ fn main() {
                         let settings = state.0.lock().unwrap();
                         let volume = settings.volume as f32;
                         let custom_path = settings.custom_sound_path.clone();
+                        let opacity = settings.opacity;
+                        let duration = settings.duration_seconds;
                         drop(settings);
 
+                        // Play the bell sound
                         let sound_data = if !custom_path.is_empty() && Path::new(&custom_path).exists() {
                             match File::open(&custom_path) {
                                 Ok(file) => {
@@ -290,6 +362,40 @@ fn main() {
                         };
 
                         let _ = play_sound_with_volume(sound_data, volume);
+
+                        // Show the overlay on all monitors
+                        let monitors = app.available_monitors().unwrap_or_default();
+                        for monitor in monitors {
+                            let counter = OVERLAY_COUNTER.fetch_add(1, Ordering::SeqCst);
+                            let window_label = format!("overlay-{}", counter);
+                            let position = monitor.position();
+                            let size = monitor.size();
+                            let url = format!("overlay.html?opacity={}&duration={}", opacity, duration);
+
+                            if let Ok(window) = tauri::WebviewWindowBuilder::new(
+                                app,
+                                &window_label,
+                                tauri::WebviewUrl::App(url.into()),
+                            )
+                            .title("")
+                            .inner_size(size.width as f64, size.height as f64)
+                            .position(position.x as f64, position.y as f64)
+                            .decorations(false)
+                            .transparent(true)
+                            .always_on_top(true)
+                            .visible_on_all_workspaces(true)
+                            .skip_taskbar(true)
+                            .resizable(false)
+                            .focused(false)
+                            .visible(true)
+                            .build()
+                            {
+                                let _ = window.set_ignore_cursor_events(true);
+                                let _ = window.set_position(PhysicalPosition::new(position.x, position.y));
+                                let _ = window.set_size(PhysicalSize::new(size.width, size.height));
+                                let _ = window.set_visible_on_all_workspaces(true);
+                            }
+                        }
                     }
                     _ => {}
                 })

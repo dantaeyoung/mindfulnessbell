@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Overlay</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: black;
+            opacity: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="overlay" id="overlay"></div>
+
+    <script>
+        // Get parameters from query string
+        const params = new URLSearchParams(window.location.search);
+        const targetOpacity = parseFloat(params.get('opacity')) || 0.8;
+        const totalDuration = parseFloat(params.get('duration')) || 3.0;
+
+        // Split duration: 1/3 fade in, 1/3 hold, 1/3 fade out
+        const fadeInDuration = totalDuration / 3;
+        const holdDuration = totalDuration / 3;
+        const fadeOutDuration = totalDuration / 3;
+
+        const overlay = document.getElementById('overlay');
+
+        // Animation using requestAnimationFrame for smooth transitions
+        function animate() {
+            const startTime = performance.now();
+            const fadeInMs = fadeInDuration * 1000;
+            const holdMs = holdDuration * 1000;
+            const fadeOutMs = fadeOutDuration * 1000;
+            const totalMs = fadeInMs + holdMs + fadeOutMs;
+
+            function step(currentTime) {
+                const elapsed = currentTime - startTime;
+
+                if (elapsed < fadeInMs) {
+                    // Fade in phase
+                    const progress = elapsed / fadeInMs;
+                    overlay.style.opacity = targetOpacity * progress;
+                } else if (elapsed < fadeInMs + holdMs) {
+                    // Hold phase
+                    overlay.style.opacity = targetOpacity;
+                } else if (elapsed < totalMs) {
+                    // Fade out phase
+                    const fadeOutElapsed = elapsed - fadeInMs - holdMs;
+                    const progress = 1 - (fadeOutElapsed / fadeOutMs);
+                    overlay.style.opacity = targetOpacity * progress;
+                } else {
+                    // Animation complete - close the window
+                    overlay.style.opacity = 0;
+                    // Notify Tauri to close this window
+                    if (window.__TAURI__) {
+                        window.__TAURI__.core.invoke('close_overlay_window');
+                    }
+                    return;
+                }
+
+                requestAnimationFrame(step);
+            }
+
+            requestAnimationFrame(step);
+        }
+
+        // Start animation when page loads
+        document.addEventListener('DOMContentLoaded', animate);
+    </script>
+</body>
+</html>
