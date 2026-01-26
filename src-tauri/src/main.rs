@@ -40,11 +40,14 @@ pub struct Settings {
     pub is_enabled: bool,
     pub timing_mode: String,
     pub interval_minutes: i32,
+    pub clock_times: Vec<i32>,  // Minutes of the hour for clock-aligned mode (0-59)
     pub opacity: f64,
     pub duration_seconds: f64,
     pub bell_start_delay: f64,
     pub volume: f64,
     pub custom_sound_path: String,
+    pub pause_media_on_bell: bool,
+    pub resume_media_after_bell: bool,
 }
 
 impl Default for Settings {
@@ -53,11 +56,14 @@ impl Default for Settings {
             is_enabled: true,
             timing_mode: "clock-aligned".to_string(),
             interval_minutes: 15,
+            clock_times: vec![0, 15, 30, 45],  // Default: every quarter hour
             opacity: 0.8,
             duration_seconds: 3.0,
             bell_start_delay: 0.5,
             volume: 0.7,
             custom_sound_path: String::new(),
+            pause_media_on_bell: false,
+            resume_media_after_bell: false,
         }
     }
 }
@@ -94,11 +100,14 @@ fn save_settings(
     store.set("isEnabled", settings.is_enabled);
     store.set("timingMode", settings.timing_mode.clone());
     store.set("intervalMinutes", settings.interval_minutes);
+    store.set("clockTimes", settings.clock_times.clone());
     store.set("opacity", settings.opacity);
     store.set("durationSeconds", settings.duration_seconds);
     store.set("bellStartDelay", settings.bell_start_delay);
     store.set("volume", settings.volume);
     store.set("customSoundPath", settings.custom_sound_path.clone());
+    store.set("pauseMediaOnBell", settings.pause_media_on_bell);
+    store.set("resumeMediaAfterBell", settings.resume_media_after_bell);
     store.save().map_err(|e| e.to_string())?;
 
     // Restart the scheduler to pick up new settings
@@ -125,6 +134,13 @@ fn load_settings_from_store(app: &AppHandle) -> Settings {
             .and_then(|v| v.as_i64())
             .map(|v| v as i32)
             .unwrap_or(15),
+        clock_times: store.get("clockTimes")
+            .and_then(|v| {
+                v.as_array().map(|arr| {
+                    arr.iter().filter_map(|item| item.as_i64().map(|n| n as i32)).collect()
+                })
+            })
+            .unwrap_or_else(|| vec![0, 15, 30, 45]),
         opacity: store.get("opacity")
             .and_then(|v| v.as_f64())
             .unwrap_or(0.8),
@@ -140,40 +156,57 @@ fn load_settings_from_store(app: &AppHandle) -> Settings {
         custom_sound_path: store.get("customSoundPath")
             .and_then(|v| v.as_str().map(|s| s.to_string()))
             .unwrap_or_default(),
+        pause_media_on_bell: store.get("pauseMediaOnBell")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        resume_media_after_bell: store.get("resumeMediaAfterBell")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
     }
 }
 
 /// Calculate seconds until the next clock-aligned bell trigger
-/// For clock-aligned mode, we trigger at :00, :15, :30, :45 (based on interval)
-fn seconds_until_next_aligned_trigger(interval_minutes: i32) -> u64 {
+/// For clock-aligned mode, we trigger at the specified minutes of each hour
+fn seconds_until_next_aligned_trigger(clock_times: &[i32]) -> u64 {
+    if clock_times.is_empty() {
+        // No times configured, wait an hour
+        return 3600;
+    }
+
     let now = Local::now();
     let current_minute = now.minute() as i32;
     let current_second = now.second() as i32;
 
-    // Find the next trigger minute based on interval
-    // With 15-min interval: triggers at 0, 15, 30, 45
-    // With 30-min interval: triggers at 0, 30
-    // With 60-min interval: triggers at 0 only
-    let next_trigger_minute = if interval_minutes >= 60 {
-        // Next hour
-        60
-    } else {
-        // Find next aligned minute
-        let mut next = ((current_minute / interval_minutes) + 1) * interval_minutes;
-        if next > 59 {
-            next = 60; // Will wrap to next hour
+    // Sort clock times and find the next one
+    let mut sorted_times: Vec<i32> = clock_times.to_vec();
+    sorted_times.sort();
+
+    // Find the next trigger minute
+    let next_trigger_minute = sorted_times
+        .iter()
+        .find(|&&m| m > current_minute || (m == current_minute && current_second == 0))
+        .copied();
+
+    let (minutes_to_wait, wrap_to_next_hour) = match next_trigger_minute {
+        Some(next_min) if next_min > current_minute => (next_min - current_minute, false),
+        Some(next_min) if next_min == current_minute && current_second == 0 => (0, false),
+        _ => {
+            // Wrap to next hour - use the first time in sorted list
+            let first_time = sorted_times[0];
+            (60 - current_minute + first_time, true)
         }
-        next
     };
 
     // Calculate seconds until next trigger
-    let minutes_to_wait = next_trigger_minute - current_minute;
-    let seconds_to_wait = (minutes_to_wait * 60) - current_second;
+    let seconds_to_wait = if wrap_to_next_hour || minutes_to_wait > 0 {
+        (minutes_to_wait * 60) - current_second
+    } else {
+        0
+    };
 
     // Ensure we always wait at least 1 second
     if seconds_to_wait <= 0 {
-        // If we're exactly on the trigger minute:second, wait for the next interval
-        (interval_minutes * 60) as u64
+        1
     } else {
         seconds_to_wait as u64
     }
@@ -211,7 +244,7 @@ fn start_scheduler(app: AppHandle) {
             }
 
             // Get current settings
-            let (timing_mode, interval_minutes) = {
+            let (timing_mode, interval_minutes, clock_times) = {
                 let state = app.state::<SettingsState>();
                 let settings = match state.0.lock() {
                     Ok(s) => s,
@@ -221,12 +254,12 @@ fn start_scheduler(app: AppHandle) {
                         continue;
                     }
                 };
-                (settings.timing_mode.clone(), settings.interval_minutes)
+                (settings.timing_mode.clone(), settings.interval_minutes, settings.clock_times.clone())
             };
 
             // Calculate sleep duration based on timing mode
             let sleep_seconds = if timing_mode == "clock-aligned" {
-                seconds_until_next_aligned_trigger(interval_minutes)
+                seconds_until_next_aligned_trigger(&clock_times)
             } else {
                 // Fixed interval mode: just use the interval
                 (interval_minutes * 60) as u64
@@ -317,6 +350,43 @@ fn create_overlay_windows(app: &AppHandle, opacity: f64, duration: f64, bell_del
     }
 }
 
+/// Send media play/pause key on macOS using system media key event
+fn send_media_key() {
+    // Use Swift to send the actual media play/pause key event
+    // NX_KEYTYPE_PLAY = 16
+    let swift_code = r#"
+import Cocoa
+
+func sendMediaKey(_ key: Int32) {
+    func doKey(_ down: Bool) {
+        let flags = NSEvent.ModifierFlags(rawValue: (down ? 0xa00 : 0xb00))
+        let data1 = Int((key << 16) | (down ? 0xa00 : 0xb00))
+        let event = NSEvent.otherEvent(
+            with: .systemDefined,
+            location: .zero,
+            modifierFlags: flags,
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            subtype: 8,
+            data1: data1,
+            data2: -1
+        )
+        event?.cgEvent?.post(tap: .cghidEventTap)
+    }
+    doKey(true)
+    doKey(false)
+}
+
+sendMediaKey(16)  // 16 = Play/Pause
+"#;
+
+    let _ = std::process::Command::new("swift")
+        .arg("-e")
+        .arg(swift_code)
+        .output();
+}
+
 /// Load sound data from the given path, or fall back to default bell sound
 fn load_sound_data(custom_path: &str) -> Vec<u8> {
     if !custom_path.is_empty() && Path::new(custom_path).exists() {
@@ -346,6 +416,21 @@ fn trigger_bell(app: &AppHandle) {
             return;
         }
     };
+
+    // Pause media if enabled
+    if settings.pause_media_on_bell {
+        send_media_key();
+    }
+
+    // Schedule media resume if enabled
+    if settings.pause_media_on_bell && settings.resume_media_after_bell {
+        let duration = settings.duration_seconds;
+        thread::spawn(move || {
+            // Wait for the bell duration to complete
+            thread::sleep(Duration::from_secs_f64(duration + 0.5)); // Add small buffer
+            send_media_key(); // Toggle play/pause again to resume
+        });
+    }
 
     // Create overlay windows - the first overlay will trigger the sound after bell_start_delay
     create_overlay_windows(app, settings.opacity, settings.duration_seconds, settings.bell_start_delay);
@@ -433,7 +518,12 @@ fn close_overlay_window(window: tauri::WebviewWindow) -> Result<(), String> {
 /// Open or focus the settings window
 fn open_settings_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("settings") {
+        // Bring existing window to front
+        let _ = window.unminimize();
         let _ = window.show();
+        // Use always_on_top trick to force window to front on macOS
+        let _ = window.set_always_on_top(true);
+        let _ = window.set_always_on_top(false);
         let _ = window.set_focus();
     } else {
         // Create settings window if it doesn't exist
@@ -443,7 +533,7 @@ fn open_settings_window(app: &AppHandle) {
             tauri::WebviewUrl::App("index.html".into()),
         )
         .title("Mindfulness Bell Settings")
-        .inner_size(400.0, 580.0)
+        .inner_size(400.0, 620.0)
         .resizable(false)
         .build();
     }

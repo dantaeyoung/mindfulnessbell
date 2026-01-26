@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mindfulness Bell Settings</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap');
+
+        :root {
+            --sage: #8b9a7c;
+            --sage-light: #a8b89a;
+            --sage-dark: #6b7a5c;
+            --rose: #c4a5a0;
+            --rose-light: #d8c4c0;
+            --ochre: #d4a855;
+            --cream: #f4f1ea;
+            --cream-dark: #e8e4dc;
+            --ink: #555555;
+            --ink-light: #6a6a65;
+            --ink-faint: #9a9a95;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -12,643 +28,893 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(180deg, #2d2d2d 0%, #1a1a1a 100%);
-            color: #e0e0e0;
-            padding: 24px;
-            user-select: none;
-            -webkit-user-select: none;
+            font-family: 'IBM Plex Mono', monospace;
+            background: var(--cream);
             min-height: 100vh;
+            padding: 24px;
         }
 
-        h1 {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 24px;
-            color: #ffffff;
-            text-align: center;
-            letter-spacing: -0.3px;
-        }
-
-        .settings-container {
-            max-width: 360px;
+        .device {
+            background: var(--cream);
+            max-width: 420px;
             margin: 0 auto;
         }
 
-        .setting-group {
-            margin-bottom: 20px;
+        /* Header */
+        .title {
+            text-align: center;
+            margin-bottom: 24px;
         }
 
-        .setting-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 16px;
-            background: rgba(255, 255, 255, 0.06);
-            border-radius: 10px;
-            margin-bottom: 2px;
+        .title-sub {
+            font-size: 9px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--ink-light);
+            margin-bottom: 4px;
         }
 
-        .setting-row:first-child {
-            border-radius: 10px 10px 0 0;
+        .title-main {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 24px;
+            letter-spacing: 1px;
+            color: var(--ink);
         }
 
-        .setting-row:last-child {
-            border-radius: 0 0 10px 10px;
-            margin-bottom: 0;
+        /* Section */
+        .section {
+            margin-bottom: 24px;
         }
 
-        .setting-row:only-child {
-            border-radius: 10px;
-        }
-
-        .setting-row.single {
-            border-radius: 10px;
-        }
-
-        .setting-label {
-            font-size: 14px;
-            color: #ffffff;
-            font-weight: 400;
-        }
-
-        .setting-value {
-            font-size: 14px;
-            color: #8e8e93;
-            margin-left: 8px;
+        .section:last-of-type {
+            margin-bottom: 16px;
         }
 
         .section-header {
-            font-size: 12px;
-            font-weight: 600;
-            color: #8e8e93;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-            margin-top: 24px;
-            padding-left: 16px;
+            display: none;
         }
 
-        .section-header:first-child {
-            margin-top: 0;
+        /* Section Content */
+        .section-content {
+            border: 1px solid var(--ink);
+            border-radius: 2px;
+            background: var(--cream);
+        }
+
+        /* Row styles */
+        .row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--ink);
+        }
+
+        .row:last-child {
+            border-bottom: none;
+        }
+
+        .row-label {
+            font-size: 10px;
+            letter-spacing: 0.5px;
+            color: var(--ink);
+        }
+
+        /* Enabled toggle row */
+        .row.enabled-row {
+            background: #e8f0e4;
         }
 
         /* Toggle switch */
-        .toggle {
+        .toggle-switch {
+            width: 48px;
+            height: 26px;
+            background: var(--cream-dark);
+            border: 1px solid var(--ink);
+            border-radius: 2px;
             position: relative;
-            width: 51px;
-            height: 31px;
+            cursor: pointer;
             flex-shrink: 0;
+            transition: background 0.35s ease;
         }
 
-        .toggle input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-
-        .toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #39393d;
-            transition: background-color 0.2s ease;
-            border-radius: 31px;
-        }
-
-        .toggle-slider:before {
-            position: absolute;
-            content: "";
-            height: 27px;
-            width: 27px;
-            left: 2px;
-            bottom: 2px;
-            background-color: white;
-            transition: transform 0.2s ease;
-            border-radius: 50%;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-        }
-
-        .toggle input:checked + .toggle-slider {
-            background-color: #34c759;
-        }
-
-        .toggle input:checked + .toggle-slider:before {
-            transform: translateX(20px);
-        }
-
-        /* Select dropdown */
-        select {
-            appearance: none;
-            -webkit-appearance: none;
-            padding: 0;
-            font-size: 14px;
-            background: transparent;
-            color: #8e8e93;
-            border: none;
-            outline: none;
-            cursor: pointer;
-            text-align: right;
-            min-width: 150px;
-        }
-
-        select option {
-            background: #2d2d2d;
-            color: #ffffff;
-        }
-
-        .select-wrapper {
-            position: relative;
-            display: flex;
-            align-items: center;
-        }
-
-        .select-wrapper::after {
+        .toggle-switch::before {
             content: '';
-            width: 8px;
-            height: 8px;
-            border-right: 2px solid #8e8e93;
-            border-bottom: 2px solid #8e8e93;
-            transform: rotate(-45deg);
-            margin-left: 8px;
-            flex-shrink: 0;
+            position: absolute;
+            top: 3px;
+            bottom: 3px;
+            left: 3px;
+            width: 18px;
+            background: var(--ink-faint);
+            border: 1px solid var(--ink);
+            border-radius: 2px;
+            transition: left 0.35s ease, background 0.35s ease;
         }
 
-        /* Slider controls */
+        .toggle-switch.on {
+            background: var(--sage-light);
+        }
+
+        .toggle-switch.on::before {
+            left: 25px;
+            background: var(--sage-dark);
+        }
+
+        /* Segment buttons */
+        .segment-row {
+            display: flex;
+            border: 1px solid var(--ink);
+            border-radius: 2px;
+            flex: 1;
+            max-width: 220px;
+            overflow: hidden;
+        }
+
+        .segment-btn {
+            flex: 1;
+            padding: 8px 6px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 9px;
+            letter-spacing: 0.5px;
+            background: var(--cream);
+            border: none;
+            border-right: 1px solid var(--ink);
+            color: var(--ink-light);
+            cursor: pointer;
+            transition: all 0.1s ease;
+            text-align: center;
+        }
+
+        .segment-btn:last-child {
+            border-right: none;
+        }
+
+        .segment-btn:hover {
+            background: var(--cream-dark);
+        }
+
+        .segment-btn.active {
+            background: var(--sage);
+            color: var(--cream);
+        }
+
+        /* Slider row */
         .slider-row {
             display: flex;
             flex-direction: column;
-            padding: 12px 16px;
-            background: rgba(255, 255, 255, 0.06);
-            border-radius: 10px;
-            margin-bottom: 2px;
+            padding: 8px 16px 16px 16px;
+            border-bottom: 1px solid var(--ink);
+            gap: 10px;
+        }
+
+        .slider-row:last-child {
+            border-bottom: none;
         }
 
         .slider-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 12px;
         }
 
-        input[type="range"] {
-            -webkit-appearance: none;
+        .slider-label {
+            font-size: 10px;
+            letter-spacing: 0.5px;
+            color: var(--ink);
+        }
+
+        .slider-value {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 14px;
+            color: var(--ink);
+            min-width: 50px;
+            text-align: right;
+        }
+
+        /* Custom slider */
+        .slider-track {
             width: 100%;
-            height: 4px;
-            background: #48484a;
+            height: 8px;
+            background: var(--cream-dark);
+            border: 1px solid var(--ink);
             border-radius: 2px;
-            outline: none;
+            position: relative;
+            cursor: pointer;
         }
 
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
+        .slider-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background: var(--sage);
+            pointer-events: none;
+            border-radius: 2px 0 0 2px;
+        }
+
+        .slider-fill.rose { background: var(--rose); }
+        .slider-fill.ochre { background: var(--ochre); }
+
+        .slider-handle {
+            position: absolute;
+            top: -7px;
             width: 20px;
             height: 20px;
-            background: #ffffff;
-            border-radius: 50%;
-            cursor: pointer;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-            transition: transform 0.1s ease;
+            background: var(--cream);
+            border: 1px solid var(--ink);
+            border-radius: 2px;
+            transform: translateX(-50%);
+            cursor: grab;
         }
 
-        input[type="range"]::-webkit-slider-thumb:hover {
-            transform: scale(1.1);
-        }
+        .slider-handle:active { cursor: grabbing; }
 
-        input[type="range"]::-webkit-slider-thumb:active {
-            transform: scale(0.95);
-        }
-
-        /* Sound selection */
-        .sound-row {
+        /* Sound file selector */
+        .sound-selector {
             display: flex;
             flex-direction: column;
-            padding: 12px 16px;
-            background: rgba(255, 255, 255, 0.06);
-            border-radius: 10px;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--ink);
+            gap: 10px;
         }
 
-        .sound-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-
-        .sound-controls {
+        .sound-options {
             display: flex;
             gap: 8px;
         }
 
-        .sound-filename {
-            font-size: 12px;
-            color: #8e8e93;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 200px;
+        .sound-option {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid var(--ink);
+            border-radius: 2px;
+            background: var(--cream);
+            cursor: pointer;
+            transition: all 0.1s ease;
+            text-align: center;
         }
 
-        /* Buttons */
-        .btn {
-            padding: 8px 16px;
-            font-size: 13px;
-            font-weight: 500;
+        .sound-option:hover { background: var(--cream-dark); }
+
+        .sound-option.active {
+            background: var(--sage-light);
+            border-color: var(--sage-dark);
+        }
+
+        .sound-option-label {
+            font-size: 10px;
+            color: var(--ink);
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .sound-option-detail {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 11px;
+            color: var(--ink-light);
+        }
+
+        .upload-btn {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 9px;
+            color: var(--sage-dark);
+            background: none;
             border: none;
-            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: underline;
+            margin-top: 4px;
+        }
+
+        /* Test button */
+        .test-button {
+            width: 100%;
+            padding: 14px;
+            margin-top: 8px;
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 14px;
+            letter-spacing: 1px;
+            background: var(--ink);
+            border: none;
+            border-radius: 2px;
+            color: var(--cream);
             cursor: pointer;
             transition: all 0.15s ease;
         }
 
-        .btn-primary {
-            background: #0a84ff;
-            color: white;
+        .test-button:hover { background: var(--sage-dark); }
+        .test-button:active { transform: scale(0.99); }
+
+        /* Clock Times Selector */
+        .clock-times-selector {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--ink);
         }
 
-        .btn-primary:hover {
-            background: #409cff;
+        .clock-times-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
         }
 
-        .btn-primary:active {
-            background: #0070d4;
-            transform: scale(0.98);
+        .clock-time-option {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            background: var(--cream);
+            border: 1px solid var(--ink);
+            border-radius: 2px;
+            cursor: pointer;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            color: var(--ink);
+            transition: background 0.2s ease;
         }
 
-        .btn-secondary {
-            background: rgba(255, 255, 255, 0.1);
-            color: #ffffff;
+        .clock-time-option:hover { background: var(--cream-dark); }
+
+        .clock-time-option.selected {
+            background: var(--sage-light);
+            border-color: var(--sage-dark);
         }
 
-        .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.15);
+        .clock-time-checkbox {
+            width: 14px;
+            height: 14px;
+            border: 1px solid var(--ink);
+            border-radius: 2px;
+            background: var(--cream);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
         }
 
-        .btn-secondary:active {
-            background: rgba(255, 255, 255, 0.08);
-            transform: scale(0.98);
+        .clock-time-option.selected .clock-time-checkbox {
+            background: var(--sage-dark);
+            border-color: var(--sage-dark);
         }
 
-        .btn-reset {
-            background: transparent;
-            color: #ff453a;
-            padding: 8px 12px;
+        .clock-time-option.selected .clock-time-checkbox::after {
+            content: '\2713';
+            color: var(--cream);
+            font-size: 10px;
         }
 
-        .btn-reset:hover {
-            background: rgba(255, 69, 58, 0.1);
+        .custom-time-input {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        /* Test Bell button */
-        .btn-test {
-            background: linear-gradient(180deg, #34c759 0%, #28a745 100%);
-            color: white;
-            width: 100%;
-            padding: 14px 20px;
-            font-size: 15px;
-            font-weight: 600;
-            border-radius: 10px;
-            margin-top: 8px;
-        }
-
-        .btn-test:hover {
-            background: linear-gradient(180deg, #40d466 0%, #34c759 100%);
-        }
-
-        .btn-test:active {
-            background: linear-gradient(180deg, #28a745 0%, #1e7e34 100%);
-            transform: scale(0.98);
-        }
-
-        /* Status message */
-        .status {
-            font-size: 12px;
-            color: #8e8e93;
+        .custom-time-input input {
+            width: 50px;
+            padding: 6px 8px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            border: 1px solid var(--ink);
+            border-radius: 2px;
+            background: var(--cream);
             text-align: center;
-            margin-top: 24px;
-            padding: 8px;
-            border-radius: 6px;
-            transition: all 0.3s ease;
         }
 
-        .status.success {
-            color: #30d158;
-            background: rgba(48, 209, 88, 0.1);
+        .custom-time-input input:focus {
+            outline: none;
+            border-color: var(--sage-dark);
         }
 
-        .status.error {
-            color: #ff453a;
-            background: rgba(255, 69, 58, 0.1);
+        .custom-time-input span {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            color: var(--ink-light);
         }
 
-        /* Divider */
-        .divider {
-            height: 1px;
-            background: rgba(255, 255, 255, 0.1);
-            margin: 20px 0;
+        .add-time-btn {
+            padding: 6px 12px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 10px;
+            background: var(--cream);
+            border: 1px dashed var(--ink);
+            border-radius: 2px;
+            cursor: pointer;
+            color: var(--ink-light);
+            transition: all 0.2s ease;
         }
+
+        .add-time-btn:hover {
+            background: var(--sage-light);
+            border-style: solid;
+        }
+
+        /* Disabled state for sections */
+        .section-content .row:not(:first-child),
+        .section-content .slider-row,
+        .section-content .sound-selector,
+        .section-content .clock-times-selector {
+            transition: opacity 0.5s ease;
+        }
+
+        .section-content.disabled .row:not(:first-child),
+        .section-content.disabled .slider-row,
+        .section-content.disabled .sound-selector,
+        .section-content.disabled .clock-times-selector {
+            opacity: 0.15;
+            pointer-events: none;
+        }
+
+        .section-content.disabled .slider-fill { background: var(--ink-faint); }
+        .section-content.disabled .segment-btn.active { background: var(--ink-faint); }
     </style>
 </head>
 <body>
-    <div class="settings-container">
-        <h1>Mindfulness Bell</h1>
-
-        <!-- Enable/Disable -->
-        <div class="setting-group">
-            <div class="setting-row single">
-                <span class="setting-label">Enable Bell</span>
-                <label class="toggle">
-                    <input type="checkbox" id="enabled" checked>
-                    <span class="toggle-slider"></span>
-                </label>
-            </div>
+    <div class="device">
+        <!-- Title -->
+        <div class="title">
+            <div class="title-main">Mindfulness Bell</div>
+            <div class="title-sub">settings</div>
         </div>
 
-        <!-- Timing Section -->
-        <div class="section-header">Timing</div>
-        <div class="setting-group">
-            <div class="setting-row">
-                <span class="setting-label">Mode</span>
-                <div class="select-wrapper">
-                    <select id="timingMode">
-                        <option value="clock-aligned">Clock-aligned</option>
-                        <option value="fixed-interval">Fixed interval</option>
-                    </select>
+        <!-- TIMING SECTION -->
+        <div class="section" id="timingSection">
+            <div class="section-content">
+                <!-- Enable Toggle -->
+                <div class="row enabled-row">
+                    <span class="row-label">Bell Enabled</span>
+                    <div class="toggle-switch on" id="enabledToggle"></div>
                 </div>
-            </div>
-            <div class="setting-row">
-                <span class="setting-label">Interval</span>
-                <div class="select-wrapper">
-                    <select id="interval">
-                        <option value="15">15 minutes</option>
-                        <option value="30">30 minutes</option>
-                        <option value="60">1 hour</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-
-        <!-- Appearance Section -->
-        <div class="section-header">Appearance</div>
-        <div class="setting-group">
-            <div class="slider-row">
-                <div class="slider-header">
-                    <span class="setting-label">Screen Opacity</span>
-                    <span class="setting-value" id="opacityValue">80%</span>
-                </div>
-                <input type="range" id="opacity" min="50" max="100" value="80">
-            </div>
-        </div>
-        <div class="setting-group">
-            <div class="slider-row">
-                <div class="slider-header">
-                    <span class="setting-label">Duration</span>
-                    <span class="setting-value" id="durationValue">3.0s</span>
-                </div>
-                <input type="range" id="duration" min="1" max="30" value="3" step="0.5">
-            </div>
-        </div>
-        <div class="setting-group">
-            <div class="slider-row">
-                <div class="slider-header">
-                    <span class="setting-label">Bell Start Delay</span>
-                    <span class="setting-value" id="bellDelayValue">0.5s</span>
-                </div>
-                <input type="range" id="bellDelay" min="0" max="3" value="0.5" step="0.1">
-            </div>
-        </div>
-
-        <!-- Sound Section -->
-        <div class="section-header">Sound</div>
-        <div class="setting-group">
-            <div class="slider-row">
-                <div class="slider-header">
-                    <span class="setting-label">Volume</span>
-                    <span class="setting-value" id="volumeValue">70%</span>
-                </div>
-                <input type="range" id="volume" min="0" max="100" value="70">
-            </div>
-        </div>
-        <div class="setting-group">
-            <div class="sound-row">
-                <div class="sound-header">
-                    <span class="setting-label">Sound File</span>
-                    <div class="sound-controls">
-                        <button class="btn btn-primary" id="chooseSoundBtn">Choose...</button>
-                        <button class="btn btn-reset" id="resetSoundBtn" style="display: none;">Reset</button>
+                <!-- Mode -->
+                <div class="row">
+                    <span class="row-label">Mode</span>
+                    <div class="segment-row" data-group="mode">
+                        <button class="segment-btn active" data-value="clock-aligned">Clock</button>
+                        <button class="segment-btn" data-value="fixed-interval">Interval</button>
                     </div>
                 </div>
-                <span class="sound-filename" id="soundFilename">Default Bell</span>
+                <!-- Clock Times (shown when Clock mode selected) -->
+                <div class="clock-times-selector" id="clockTimesSelector">
+                    <div class="clock-times-grid" id="clockTimesGrid"></div>
+                    <div class="custom-time-input">
+                        <span>:</span>
+                        <input type="number" id="customMinuteInput" min="0" max="59" placeholder="00">
+                        <button class="add-time-btn" id="addCustomTimeBtn">+ Add time</button>
+                    </div>
+                </div>
+                <!-- Interval (shown when Interval mode selected) -->
+                <div class="row" id="intervalRow" style="display: none;">
+                    <span class="row-label">Interval</span>
+                    <div class="segment-row" data-group="interval">
+                        <button class="segment-btn active" data-value="15">15m</button>
+                        <button class="segment-btn" data-value="30">30m</button>
+                        <button class="segment-btn" data-value="60">1hr</button>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Test Bell Button -->
-        <div class="setting-group">
-            <button class="btn btn-test" id="testBellBtn">Test Bell</button>
+        <!-- SOUND SECTION -->
+        <div class="section" id="soundSection">
+            <div class="section-content">
+                <!-- Pause Media Toggle -->
+                <div class="row">
+                    <span class="row-label">Pause media on bell</span>
+                    <div class="toggle-switch" id="pauseMediaToggle"></div>
+                </div>
+                <!-- Resume Media Toggle -->
+                <div class="row">
+                    <span class="row-label">Resume media after bell</span>
+                    <div class="toggle-switch" id="resumeMediaToggle"></div>
+                </div>
+                <!-- Volume Slider -->
+                <div class="slider-row">
+                    <div class="slider-header">
+                        <span class="slider-label">Volume</span>
+                        <span class="slider-value" id="volumeValue">70%</span>
+                    </div>
+                    <div class="slider-track" id="volumeTrack" data-min="0" data-max="100" data-setting="volume">
+                        <div class="slider-fill" style="width: 70%;"></div>
+                        <div class="slider-handle" style="left: 70%;"></div>
+                    </div>
+                </div>
+                <!-- Bell Choice -->
+                <div class="sound-selector">
+                    <span class="slider-label">Bell Sound</span>
+                    <div class="sound-options">
+                        <div class="sound-option active" data-sound="default">
+                            <span class="sound-option-label">Default</span>
+                            <span class="sound-option-detail">Singing bowl</span>
+                        </div>
+                        <div class="sound-option" data-sound="custom">
+                            <span class="sound-option-label">Custom</span>
+                            <span class="sound-option-detail" id="customSoundName">No file</span>
+                            <button class="upload-btn" id="uploadBtn">change file...</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <div class="status" id="status">Settings will be saved automatically</div>
+        <!-- VISUAL SECTION -->
+        <div class="section" id="visualSection">
+            <div class="section-content">
+                <!-- Opacity Slider -->
+                <div class="slider-row">
+                    <div class="slider-header">
+                        <span class="slider-label">Opacity</span>
+                        <span class="slider-value" id="opacityValue">80%</span>
+                    </div>
+                    <div class="slider-track" id="opacityTrack" data-min="0" data-max="100" data-setting="opacity">
+                        <div class="slider-fill rose" style="width: 80%;"></div>
+                        <div class="slider-handle" style="left: 80%;"></div>
+                    </div>
+                </div>
+                <!-- Duration Slider -->
+                <div class="slider-row">
+                    <div class="slider-header">
+                        <span class="slider-label">Duration</span>
+                        <span class="slider-value" id="durationValue">3.0s</span>
+                    </div>
+                    <div class="slider-track" id="durationTrack" data-min="1" data-max="30" data-setting="duration">
+                        <div class="slider-fill ochre" style="width: 6.9%;"></div>
+                        <div class="slider-handle" style="left: 6.9%;"></div>
+                    </div>
+                </div>
+                <!-- Delay Slider -->
+                <div class="slider-row">
+                    <div class="slider-header">
+                        <span class="slider-label">Bell Delay</span>
+                        <span class="slider-value" id="bellDelayValue">0.5s</span>
+                    </div>
+                    <div class="slider-track" id="bellDelayTrack" data-min="0" data-max="3" data-setting="bellDelay">
+                        <div class="slider-fill" style="width: 16.7%;"></div>
+                        <div class="slider-handle" style="left: 16.7%;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Button -->
+        <button class="test-button" id="testButton">Test the bell</button>
     </div>
 
     <script>
-        // Settings management using Tauri IPC
+        // Tauri API
         const { invoke } = window.__TAURI__.core;
         const { open } = window.__TAURI__.dialog;
 
-        // DOM elements
-        const enabledCheckbox = document.getElementById('enabled');
-        const timingModeSelect = document.getElementById('timingMode');
-        const intervalSelect = document.getElementById('interval');
-        const opacitySlider = document.getElementById('opacity');
-        const durationSlider = document.getElementById('duration');
-        const bellDelaySlider = document.getElementById('bellDelay');
-        const volumeSlider = document.getElementById('volume');
-        const opacityValue = document.getElementById('opacityValue');
-        const durationValue = document.getElementById('durationValue');
-        const bellDelayValue = document.getElementById('bellDelayValue');
-        const volumeValue = document.getElementById('volumeValue');
-        const statusDiv = document.getElementById('status');
-        const chooseSoundBtn = document.getElementById('chooseSoundBtn');
-        const resetSoundBtn = document.getElementById('resetSoundBtn');
-        const soundFilename = document.getElementById('soundFilename');
-        const testBellBtn = document.getElementById('testBellBtn');
-
-        // Current settings object
+        // Settings object
         let currentSettings = {
             isEnabled: true,
             timingMode: 'clock-aligned',
             intervalMinutes: 15,
+            clockTimes: [0, 15, 30, 45],
             opacity: 0.8,
             durationSeconds: 3.0,
             bellStartDelay: 0.5,
             volume: 0.7,
-            customSoundPath: ''
+            customSoundPath: '',
+            pauseMediaOnBell: false,
+            resumeMediaAfterBell: false
         };
 
-        // Update sound filename display
-        function updateSoundDisplay() {
-            if (currentSettings.customSoundPath) {
-                // Extract filename from path
-                const parts = currentSettings.customSoundPath.split(/[/\\]/);
-                const filename = parts[parts.length - 1];
-                soundFilename.textContent = filename;
-                resetSoundBtn.style.display = 'inline-block';
-            } else {
-                soundFilename.textContent = 'Default Bell';
-                resetSoundBtn.style.display = 'none';
-            }
-        }
+        // DOM elements
+        const enabledToggle = document.getElementById('enabledToggle');
+        const clockTimesGrid = document.getElementById('clockTimesGrid');
+        const clockTimesSelector = document.getElementById('clockTimesSelector');
+        const intervalRow = document.getElementById('intervalRow');
+        const customMinuteInput = document.getElementById('customMinuteInput');
+        const addCustomTimeBtn = document.getElementById('addCustomTimeBtn');
+        const testButton = document.getElementById('testButton');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const customSoundName = document.getElementById('customSoundName');
+        const pauseMediaToggle = document.getElementById('pauseMediaToggle');
+        const resumeMediaToggle = document.getElementById('resumeMediaToggle');
 
-        // Load settings from backend on page load
-        async function loadSettings() {
-            try {
-                const settings = await invoke('get_settings');
-                currentSettings = settings;
-
-                // Update UI with loaded settings
-                enabledCheckbox.checked = settings.isEnabled;
-                timingModeSelect.value = settings.timingMode;
-                intervalSelect.value = settings.intervalMinutes.toString();
-
-                // Convert 0-1 range to percentage for UI
-                opacitySlider.value = Math.round(settings.opacity * 100);
-                opacityValue.textContent = opacitySlider.value + '%';
-
-                durationSlider.value = settings.durationSeconds;
-                durationValue.textContent = parseFloat(settings.durationSeconds).toFixed(1) + 's';
-
-                bellDelaySlider.value = settings.bellStartDelay;
-                bellDelayValue.textContent = parseFloat(settings.bellStartDelay).toFixed(1) + 's';
-
-                volumeSlider.value = Math.round(settings.volume * 100);
-                volumeValue.textContent = volumeSlider.value + '%';
-
-                // Update sound display
-                updateSoundDisplay();
-
-                showStatus('Settings loaded', 'success');
-            } catch (error) {
-                console.error('Failed to load settings:', error);
-                showStatus('Failed to load settings', 'error');
-            }
-        }
-
-        // Show status message
-        function showStatus(message, type = '') {
-            statusDiv.textContent = message;
-            statusDiv.className = 'status' + (type ? ' ' + type : '');
-
-            if (type) {
-                setTimeout(() => {
-                    statusDiv.textContent = 'Settings will be saved automatically';
-                    statusDiv.className = 'status';
-                }, 2000);
-            }
-        }
-
-        // Save settings to backend
-        async function saveSettings() {
-            try {
-                await invoke('save_settings', { settings: currentSettings });
-                showStatus('Saved', 'success');
-            } catch (error) {
-                console.error('Failed to save settings:', error);
-                showStatus('Failed to save settings', 'error');
-            }
-        }
-
-        // Debounce function to avoid excessive saves
+        // Debounced save
         let saveTimeout = null;
         function debouncedSave() {
-            if (saveTimeout) {
-                clearTimeout(saveTimeout);
-            }
+            if (saveTimeout) clearTimeout(saveTimeout);
             saveTimeout = setTimeout(saveSettings, 300);
         }
 
-        // Event listeners for settings changes
-        enabledCheckbox.addEventListener('change', (e) => {
-            currentSettings.isEnabled = e.target.checked;
+        // Save settings
+        async function saveSettings() {
+            try {
+                await invoke('save_settings', { settings: currentSettings });
+                console.log('Settings saved');
+            } catch (error) {
+                console.error('Failed to save settings:', error);
+            }
+        }
+
+        // Load settings
+        async function loadSettings() {
+            try {
+                const settings = await invoke('get_settings');
+                currentSettings = { ...currentSettings, ...settings };
+
+                // Ensure clockTimes has defaults
+                if (!currentSettings.clockTimes || currentSettings.clockTimes.length === 0) {
+                    currentSettings.clockTimes = [0, 15, 30, 45];
+                }
+
+                updateUI();
+                console.log('Settings loaded:', currentSettings);
+            } catch (error) {
+                console.error('Failed to load settings:', error);
+            }
+        }
+
+        // Update entire UI from settings
+        function updateUI() {
+            // Enabled toggle
+            enabledToggle.classList.toggle('on', currentSettings.isEnabled);
+            updateSectionState(enabledToggle);
+
+            // Mode buttons
+            document.querySelectorAll('[data-group="mode"] .segment-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.value === currentSettings.timingMode);
+            });
+
+            // Show/hide clock vs interval
+            if (currentSettings.timingMode === 'clock-aligned') {
+                clockTimesSelector.style.display = 'block';
+                intervalRow.style.display = 'none';
+            } else {
+                clockTimesSelector.style.display = 'none';
+                intervalRow.style.display = 'flex';
+            }
+
+            // Clock times
+            renderClockTimes();
+
+            // Interval buttons
+            document.querySelectorAll('[data-group="interval"] .segment-btn').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.value) === currentSettings.intervalMinutes);
+            });
+
+            // Sliders
+            updateSlider('volumeTrack', currentSettings.volume * 100, '%', 'volumeValue');
+            updateSlider('opacityTrack', currentSettings.opacity * 100, '%', 'opacityValue');
+            updateSlider('durationTrack', currentSettings.durationSeconds, 's', 'durationValue', 1);
+            updateSlider('bellDelayTrack', currentSettings.bellStartDelay, 's', 'bellDelayValue', 1);
+
+            // Pause media toggle
+            pauseMediaToggle.classList.toggle('on', currentSettings.pauseMediaOnBell);
+            resumeMediaToggle.classList.toggle('on', currentSettings.resumeMediaAfterBell);
+
+            // Sound selection
+            const hasCustomSound = currentSettings.customSoundPath && currentSettings.customSoundPath.length > 0;
+            document.querySelectorAll('.sound-option').forEach(opt => {
+                if (hasCustomSound) {
+                    opt.classList.toggle('active', opt.dataset.sound === 'custom');
+                } else {
+                    opt.classList.toggle('active', opt.dataset.sound === 'default');
+                }
+            });
+            if (hasCustomSound) {
+                const filename = currentSettings.customSoundPath.split(/[/\\]/).pop();
+                customSoundName.textContent = filename;
+            } else {
+                customSoundName.textContent = 'No file';
+            }
+        }
+
+        // Update slider position and value display
+        function updateSlider(trackId, value, suffix, valueId, decimals = 0) {
+            const track = document.getElementById(trackId);
+            const fill = track.querySelector('.slider-fill');
+            const handle = track.querySelector('.slider-handle');
+            const valueDisplay = document.getElementById(valueId);
+
+            const min = parseFloat(track.dataset.min);
+            const max = parseFloat(track.dataset.max);
+            const percent = ((value - min) / (max - min)) * 100;
+
+            fill.style.width = percent + '%';
+            handle.style.left = percent + '%';
+            valueDisplay.textContent = (decimals > 0 ? value.toFixed(decimals) : Math.round(value)) + suffix;
+        }
+
+        // Render clock times checkboxes
+        function renderClockTimes() {
+            clockTimesGrid.innerHTML = '';
+            const sortedTimes = [...currentSettings.clockTimes].sort((a, b) => a - b);
+
+            sortedTimes.forEach(minute => {
+                const chip = document.createElement('div');
+                chip.className = 'clock-time-option selected';
+                chip.dataset.minute = minute;
+                chip.innerHTML = `
+                    <div class="clock-time-checkbox"></div>
+                    <span>:${minute.toString().padStart(2, '0')}</span>
+                `;
+                chip.addEventListener('click', () => toggleClockTime(minute));
+                clockTimesGrid.appendChild(chip);
+            });
+        }
+
+        // Toggle clock time
+        function toggleClockTime(minute) {
+            const index = currentSettings.clockTimes.indexOf(minute);
+            if (index > -1 && currentSettings.clockTimes.length > 1) {
+                currentSettings.clockTimes.splice(index, 1);
+            }
+            renderClockTimes();
+            debouncedSave();
+        }
+
+        // Add custom time
+        function addCustomTime() {
+            const minute = parseInt(customMinuteInput.value);
+            if (isNaN(minute) || minute < 0 || minute > 59) return;
+
+            if (!currentSettings.clockTimes.includes(minute)) {
+                currentSettings.clockTimes.push(minute);
+                renderClockTimes();
+                debouncedSave();
+            }
+            customMinuteInput.value = '';
+        }
+
+        // Update section disabled state
+        function updateSectionState(toggle) {
+            const content = toggle.closest('.section-content');
+            if (toggle.classList.contains('on')) {
+                content.classList.remove('disabled');
+            } else {
+                content.classList.add('disabled');
+            }
+        }
+
+        // Setup slider interaction
+        function setupSlider(trackId, settingKey, multiplier = 1, decimals = 0) {
+            const track = document.getElementById(trackId);
+            const fill = track.querySelector('.slider-fill');
+            const handle = track.querySelector('.slider-handle');
+            const row = track.closest('.slider-row');
+            const valueDisplay = row.querySelector('.slider-value');
+
+            const min = parseFloat(track.dataset.min);
+            const max = parseFloat(track.dataset.max);
+            let isDragging = false;
+
+            const updateFromPosition = (clientX) => {
+                const rect = track.getBoundingClientRect();
+                let percent = (clientX - rect.left) / rect.width;
+                percent = Math.max(0, Math.min(1, percent));
+
+                const rawValue = min + (max - min) * percent;
+                const displayValue = decimals > 0 ? rawValue.toFixed(decimals) : Math.round(rawValue);
+
+                fill.style.width = (percent * 100) + '%';
+                handle.style.left = (percent * 100) + '%';
+
+                const suffix = settingKey === 'volume' || settingKey === 'opacity' ? '%' : 's';
+                valueDisplay.textContent = displayValue + suffix;
+
+                // Update settings
+                currentSettings[settingKey] = rawValue / multiplier;
+                debouncedSave();
+            };
+
+            track.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                updateFromPosition(e.clientX);
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (isDragging) updateFromPosition(e.clientX);
+            });
+
+            document.addEventListener('mouseup', () => { isDragging = false; });
+        }
+
+        // Event listeners
+        enabledToggle.addEventListener('click', () => {
+            enabledToggle.classList.toggle('on');
+            currentSettings.isEnabled = enabledToggle.classList.contains('on');
+            updateSectionState(enabledToggle);
             debouncedSave();
         });
 
-        timingModeSelect.addEventListener('change', (e) => {
-            currentSettings.timingMode = e.target.value;
+        // Pause media toggle
+        pauseMediaToggle.addEventListener('click', () => {
+            pauseMediaToggle.classList.toggle('on');
+            currentSettings.pauseMediaOnBell = pauseMediaToggle.classList.contains('on');
             debouncedSave();
         });
 
-        intervalSelect.addEventListener('change', (e) => {
-            currentSettings.intervalMinutes = parseInt(e.target.value, 10);
+        // Resume media toggle
+        resumeMediaToggle.addEventListener('click', () => {
+            resumeMediaToggle.classList.toggle('on');
+            currentSettings.resumeMediaAfterBell = resumeMediaToggle.classList.contains('on');
             debouncedSave();
         });
 
-        opacitySlider.addEventListener('input', (e) => {
-            opacityValue.textContent = e.target.value + '%';
-            currentSettings.opacity = parseInt(e.target.value, 10) / 100;
-            debouncedSave();
+        // Mode buttons
+        document.querySelectorAll('[data-group="mode"] .segment-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('[data-group="mode"] .segment-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentSettings.timingMode = btn.dataset.value;
+
+                if (currentSettings.timingMode === 'clock-aligned') {
+                    clockTimesSelector.style.display = 'block';
+                    intervalRow.style.display = 'none';
+                } else {
+                    clockTimesSelector.style.display = 'none';
+                    intervalRow.style.display = 'flex';
+                }
+                debouncedSave();
+            });
         });
 
-        durationSlider.addEventListener('input', (e) => {
-            durationValue.textContent = parseFloat(e.target.value).toFixed(1) + 's';
-            currentSettings.durationSeconds = parseFloat(e.target.value);
-            debouncedSave();
+        // Interval buttons
+        document.querySelectorAll('[data-group="interval"] .segment-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('[data-group="interval"] .segment-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentSettings.intervalMinutes = parseInt(btn.dataset.value);
+                debouncedSave();
+            });
         });
 
-        bellDelaySlider.addEventListener('input', (e) => {
-            bellDelayValue.textContent = parseFloat(e.target.value).toFixed(1) + 's';
-            currentSettings.bellStartDelay = parseFloat(e.target.value);
-            debouncedSave();
+        addCustomTimeBtn.addEventListener('click', addCustomTime);
+        customMinuteInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') addCustomTime();
         });
 
-        volumeSlider.addEventListener('input', (e) => {
-            volumeValue.textContent = e.target.value + '%';
-            currentSettings.volume = parseInt(e.target.value, 10) / 100;
-            debouncedSave();
+        // Sound options
+        document.querySelectorAll('.sound-option').forEach(opt => {
+            opt.addEventListener('click', (e) => {
+                if (e.target.classList.contains('upload-btn')) return;
+                document.querySelectorAll('.sound-option').forEach(o => o.classList.remove('active'));
+                opt.classList.add('active');
+
+                if (opt.dataset.sound === 'default') {
+                    currentSettings.customSoundPath = '';
+                    debouncedSave();
+                }
+            });
         });
 
-        // File picker for custom sound
-        chooseSoundBtn.addEventListener('click', async () => {
+        // File upload
+        uploadBtn.addEventListener('click', async () => {
             try {
                 const selected = await open({
                     multiple: false,
-                    filters: [{
-                        name: 'Audio Files',
-                        extensions: ['mp3', 'wav', 'aiff', 'aac', 'm4a', 'ogg']
-                    }]
+                    filters: [{ name: 'Audio Files', extensions: ['mp3', 'wav', 'aiff', 'aac', 'm4a', 'ogg'] }]
                 });
-
                 if (selected) {
                     currentSettings.customSoundPath = selected;
-                    updateSoundDisplay();
+                    const filename = selected.split(/[/\\]/).pop();
+                    customSoundName.textContent = filename;
+                    document.querySelectorAll('.sound-option').forEach(o => o.classList.remove('active'));
+                    document.querySelector('.sound-option[data-sound="custom"]').classList.add('active');
                     debouncedSave();
                 }
             } catch (error) {
                 console.error('Failed to open file dialog:', error);
-                showStatus('Failed to open file dialog', 'error');
             }
         });
 
-        // Reset custom sound
-        resetSoundBtn.addEventListener('click', () => {
-            currentSettings.customSoundPath = '';
-            updateSoundDisplay();
-            debouncedSave();
-        });
-
-        // Test Bell button - triggers bell with all settings (including delay)
-        testBellBtn.addEventListener('click', async () => {
+        // Test button
+        testButton.addEventListener('click', async () => {
             try {
                 await invoke('trigger_test_bell');
-                showStatus('Bell triggered!', 'success');
             } catch (error) {
                 console.error('Failed to trigger bell:', error);
-                showStatus('Failed to trigger bell', 'error');
             }
         });
 
-        // Load settings when page loads
+        // Setup sliders
+        setupSlider('volumeTrack', 'volume', 100);
+        setupSlider('opacityTrack', 'opacity', 100);
+        setupSlider('durationTrack', 'durationSeconds', 1, 1);
+        setupSlider('bellDelayTrack', 'bellStartDelay', 1, 1);
+
+        // Load settings on page load
         document.addEventListener('DOMContentLoaded', loadSettings);
     </script>
 </body>
