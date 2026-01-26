@@ -12,7 +12,7 @@
   "app": {
     "withGlobalTauri": true,
     "trayIcon": {
-      "iconPath": "icons/icon.png",
+      "iconPath": "icons/tray-bell.png",
       "iconAsTemplate": true
     },
     "windows": [],
