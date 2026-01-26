@@ -150,7 +150,7 @@ fn open_settings_window(app: &AppHandle) {
             tauri::WebviewUrl::App("index.html".into()),
         )
         .title("Mindfulness Bell Settings")
-        .inner_size(400.0, 500.0)
+        .inner_size(400.0, 580.0)
         .resizable(false)
         .build();
     }
@@ -160,6 +160,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_dialog::init())
         .manage(SettingsState(Mutex::new(Settings::default())))
         .invoke_handler(tauri::generate_handler![get_settings, save_settings])
         .setup(|app| {
