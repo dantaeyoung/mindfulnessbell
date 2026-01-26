@@ -410,6 +410,15 @@
                 <input type="range" id="duration" min="1" max="10" value="3" step="0.5">
             </div>
         </div>
+        <div class="setting-group">
+            <div class="slider-row">
+                <div class="slider-header">
+                    <span class="setting-label">Bell Start Delay</span>
+                    <span class="setting-value" id="bellDelayValue">0.5s</span>
+                </div>
+                <input type="range" id="bellDelay" min="0" max="3" value="0.5" step="0.1">
+            </div>
+        </div>
 
         <!-- Sound Section -->
         <div class="section-header">Sound</div>
@@ -454,9 +463,11 @@
         const intervalSelect = document.getElementById('interval');
         const opacitySlider = document.getElementById('opacity');
         const durationSlider = document.getElementById('duration');
+        const bellDelaySlider = document.getElementById('bellDelay');
         const volumeSlider = document.getElementById('volume');
         const opacityValue = document.getElementById('opacityValue');
         const durationValue = document.getElementById('durationValue');
+        const bellDelayValue = document.getElementById('bellDelayValue');
         const volumeValue = document.getElementById('volumeValue');
         const statusDiv = document.getElementById('status');
         const chooseSoundBtn = document.getElementById('chooseSoundBtn');
@@ -471,6 +482,7 @@
             intervalMinutes: 15,
             opacity: 0.8,
             durationSeconds: 3.0,
+            bellStartDelay: 0.5,
             volume: 0.7,
             customSoundPath: ''
         };
@@ -506,6 +518,9 @@
 
                 durationSlider.value = settings.durationSeconds;
                 durationValue.textContent = parseFloat(settings.durationSeconds).toFixed(1) + 's';
+
+                bellDelaySlider.value = settings.bellStartDelay;
+                bellDelayValue.textContent = parseFloat(settings.bellStartDelay).toFixed(1) + 's';
 
                 volumeSlider.value = Math.round(settings.volume * 100);
                 volumeValue.textContent = volumeSlider.value + '%';
@@ -578,6 +593,12 @@
         durationSlider.addEventListener('input', (e) => {
             durationValue.textContent = parseFloat(e.target.value).toFixed(1) + 's';
             currentSettings.durationSeconds = parseFloat(e.target.value);
+            debouncedSave();
+        });
+
+        bellDelaySlider.addEventListener('input', (e) => {
+            bellDelayValue.textContent = parseFloat(e.target.value).toFixed(1) + 's';
+            currentSettings.bellStartDelay = parseFloat(e.target.value);
             debouncedSave();
         });
 

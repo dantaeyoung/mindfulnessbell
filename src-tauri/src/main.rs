@@ -42,6 +42,7 @@ pub struct Settings {
     pub interval_minutes: i32,
     pub opacity: f64,
     pub duration_seconds: f64,
+    pub bell_start_delay: f64,
     pub volume: f64,
     pub custom_sound_path: String,
 }
@@ -54,6 +55,7 @@ impl Default for Settings {
             interval_minutes: 15,
             opacity: 0.8,
             duration_seconds: 3.0,
+            bell_start_delay: 0.5,
             volume: 0.7,
             custom_sound_path: String::new(),
         }
@@ -94,6 +96,7 @@ fn save_settings(
     store.set("intervalMinutes", settings.interval_minutes);
     store.set("opacity", settings.opacity);
     store.set("durationSeconds", settings.duration_seconds);
+    store.set("bellStartDelay", settings.bell_start_delay);
     store.set("volume", settings.volume);
     store.set("customSoundPath", settings.custom_sound_path.clone());
     store.save().map_err(|e| e.to_string())?;
@@ -128,6 +131,9 @@ fn load_settings_from_store(app: &AppHandle) -> Settings {
         duration_seconds: store.get("durationSeconds")
             .and_then(|v| v.as_f64())
             .unwrap_or(3.0),
+        bell_start_delay: store.get("bellStartDelay")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.5),
         volume: store.get("volume")
             .and_then(|v| v.as_f64())
             .unwrap_or(0.7),
@@ -337,14 +343,22 @@ fn trigger_bell(app: &AppHandle) {
         }
     };
 
-    // Play the bell sound
-    let sound_data = load_sound_data(&settings.custom_sound_path);
-    if let Err(e) = play_sound_with_volume(sound_data, settings.volume as f32) {
-        eprintln!("Failed to play bell sound: {}", e);
-    }
-
-    // Show the overlay on all monitors
+    // Show the overlay first
     create_overlay_windows(app, settings.opacity, settings.duration_seconds);
+
+    // Play the bell sound after the configured delay
+    let sound_data = load_sound_data(&settings.custom_sound_path);
+    let volume = settings.volume as f32;
+    let delay_ms = (settings.bell_start_delay * 1000.0) as u64;
+
+    thread::spawn(move || {
+        if delay_ms > 0 {
+            thread::sleep(Duration::from_millis(delay_ms));
+        }
+        if let Err(e) = play_sound_with_volume(sound_data, volume) {
+            eprintln!("Failed to play bell sound: {}", e);
+        }
+    });
 }
 
 /// Load the appropriate tray icon based on enabled state
