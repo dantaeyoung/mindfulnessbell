@@ -46,6 +46,11 @@
 
         const overlay = document.getElementById('overlay');
 
+        // Ease-in-out function for smooth animation
+        function easeInOut(t) {
+            return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        }
+
         // Animation using requestAnimationFrame for smooth transitions
         function animate() {
             const startTime = performance.now();
@@ -58,16 +63,16 @@
                 const elapsed = currentTime - startTime;
 
                 if (elapsed < fadeInMs) {
-                    // Fade in phase
-                    const progress = elapsed / fadeInMs;
+                    // Fade in phase with ease-in-out
+                    const progress = easeInOut(elapsed / fadeInMs);
                     overlay.style.opacity = targetOpacity * progress;
                 } else if (elapsed < fadeInMs + holdMs) {
                     // Hold phase
                     overlay.style.opacity = targetOpacity;
                 } else if (elapsed < totalMs) {
-                    // Fade out phase
+                    // Fade out phase with ease-in-out
                     const fadeOutElapsed = elapsed - fadeInMs - holdMs;
-                    const progress = 1 - (fadeOutElapsed / fadeOutMs);
+                    const progress = 1 - easeInOut(fadeOutElapsed / fadeOutMs);
                     overlay.style.opacity = targetOpacity * progress;
                 } else {
                     // Animation complete - close the window
