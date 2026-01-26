@@ -193,23 +193,127 @@
         <div class="value-display" id="volumeValue">70%</div>
     </div>
 
-    <div class="status">
+    <div class="status" id="status">
         Settings will be saved automatically
     </div>
 
     <script>
-        // Update value displays
-        document.getElementById('opacity').addEventListener('input', (e) => {
-            document.getElementById('opacityValue').textContent = e.target.value + '%';
+        // Settings management using Tauri IPC
+        const { invoke } = window.__TAURI__.core;
+
+        // DOM elements
+        const enabledCheckbox = document.getElementById('enabled');
+        const timingModeSelect = document.getElementById('timingMode');
+        const intervalSelect = document.getElementById('interval');
+        const opacitySlider = document.getElementById('opacity');
+        const durationSlider = document.getElementById('duration');
+        const volumeSlider = document.getElementById('volume');
+        const opacityValue = document.getElementById('opacityValue');
+        const durationValue = document.getElementById('durationValue');
+        const volumeValue = document.getElementById('volumeValue');
+        const statusDiv = document.getElementById('status');
+
+        // Current settings object
+        let currentSettings = {
+            isEnabled: true,
+            timingMode: 'clock-aligned',
+            intervalMinutes: 15,
+            opacity: 0.8,
+            durationSeconds: 3.0,
+            volume: 0.7,
+            customSoundPath: ''
+        };
+
+        // Load settings from backend on page load
+        async function loadSettings() {
+            try {
+                const settings = await invoke('get_settings');
+                currentSettings = settings;
+
+                // Update UI with loaded settings
+                enabledCheckbox.checked = settings.isEnabled;
+                timingModeSelect.value = settings.timingMode;
+                intervalSelect.value = settings.intervalMinutes.toString();
+
+                // Convert 0-1 range to percentage for UI
+                opacitySlider.value = Math.round(settings.opacity * 100);
+                opacityValue.textContent = opacitySlider.value + '%';
+
+                durationSlider.value = settings.durationSeconds;
+                durationValue.textContent = parseFloat(settings.durationSeconds).toFixed(1) + ' seconds';
+
+                volumeSlider.value = Math.round(settings.volume * 100);
+                volumeValue.textContent = volumeSlider.value + '%';
+
+                statusDiv.textContent = 'Settings loaded';
+                setTimeout(() => {
+                    statusDiv.textContent = 'Settings will be saved automatically';
+                }, 1500);
+            } catch (error) {
+                console.error('Failed to load settings:', error);
+                statusDiv.textContent = 'Failed to load settings';
+            }
+        }
+
+        // Save settings to backend
+        async function saveSettings() {
+            try {
+                await invoke('save_settings', { settings: currentSettings });
+                statusDiv.textContent = 'Settings saved';
+                setTimeout(() => {
+                    statusDiv.textContent = 'Settings will be saved automatically';
+                }, 1500);
+            } catch (error) {
+                console.error('Failed to save settings:', error);
+                statusDiv.textContent = 'Failed to save settings';
+            }
+        }
+
+        // Debounce function to avoid excessive saves
+        let saveTimeout = null;
+        function debouncedSave() {
+            if (saveTimeout) {
+                clearTimeout(saveTimeout);
+            }
+            saveTimeout = setTimeout(saveSettings, 300);
+        }
+
+        // Event listeners for settings changes
+        enabledCheckbox.addEventListener('change', (e) => {
+            currentSettings.isEnabled = e.target.checked;
+            debouncedSave();
         });
 
-        document.getElementById('duration').addEventListener('input', (e) => {
-            document.getElementById('durationValue').textContent = parseFloat(e.target.value).toFixed(1) + ' seconds';
+        timingModeSelect.addEventListener('change', (e) => {
+            currentSettings.timingMode = e.target.value;
+            debouncedSave();
         });
 
-        document.getElementById('volume').addEventListener('input', (e) => {
-            document.getElementById('volumeValue').textContent = e.target.value + '%';
+        intervalSelect.addEventListener('change', (e) => {
+            currentSettings.intervalMinutes = parseInt(e.target.value, 10);
+            debouncedSave();
         });
+
+        opacitySlider.addEventListener('input', (e) => {
+            opacityValue.textContent = e.target.value + '%';
+            currentSettings.opacity = parseInt(e.target.value, 10) / 100;
+            debouncedSave();
+        });
+
+        durationSlider.addEventListener('input', (e) => {
+            durationValue.textContent = parseFloat(e.target.value).toFixed(1) + ' seconds';
+            currentSettings.durationSeconds = parseFloat(e.target.value);
+            debouncedSave();
+        });
+
+        volumeSlider.addEventListener('input', (e) => {
+            volumeValue.textContent = e.target.value + '%';
+            currentSettings.volume = parseInt(e.target.value, 10) / 100;
+            debouncedSave();
+        });
+
+        // Load settings when page loads
+        document.addEventListener('DOMContentLoaded', loadSettings);
     </script>
 </body>
 </html>
