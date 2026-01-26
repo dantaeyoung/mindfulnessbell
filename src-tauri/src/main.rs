@@ -265,8 +265,8 @@ fn start_scheduler(app: AppHandle) {
     });
 }
 
-/// Create overlay windows on all monitors with the given opacity and duration
-fn create_overlay_windows(app: &AppHandle, opacity: f64, duration: f64) {
+/// Create overlay windows on all monitors with the given opacity, duration, and sound settings
+fn create_overlay_windows(app: &AppHandle, opacity: f64, duration: f64, bell_delay: f64) {
     let monitors = match app.available_monitors() {
         Ok(m) => m,
         Err(e) => {
@@ -275,12 +275,16 @@ fn create_overlay_windows(app: &AppHandle, opacity: f64, duration: f64) {
         }
     };
 
+    let mut is_first = true;
     for monitor in monitors {
         let counter = OVERLAY_COUNTER.fetch_add(1, Ordering::SeqCst);
         let window_label = format!("overlay-{}", counter);
         let position = monitor.position();
         let size = monitor.size();
-        let url = format!("overlay.html?opacity={}&duration={}", opacity, duration);
+        // Only the first overlay window triggers the sound to avoid multiple sounds
+        let play_sound = if is_first { "true" } else { "false" };
+        is_first = false;
+        let url = format!("overlay.html?opacity={}&duration={}&bellDelay={}&playSound={}", opacity, duration, bell_delay, play_sound);
 
         match tauri::WebviewWindowBuilder::new(
             app,
@@ -332,7 +336,7 @@ fn load_sound_data(custom_path: &str) -> Vec<u8> {
     DEFAULT_BELL_SOUND.to_vec()
 }
 
-/// Trigger the bell: play sound and show overlay
+/// Trigger the bell: show overlay which will play sound after configured delay
 fn trigger_bell(app: &AppHandle) {
     let state = app.state::<SettingsState>();
     let settings = match state.0.lock() {
@@ -343,22 +347,8 @@ fn trigger_bell(app: &AppHandle) {
         }
     };
 
-    // Show the overlay first
-    create_overlay_windows(app, settings.opacity, settings.duration_seconds);
-
-    // Play the bell sound after the configured delay
-    let sound_data = load_sound_data(&settings.custom_sound_path);
-    let volume = settings.volume as f32;
-    let delay_ms = (settings.bell_start_delay * 1000.0) as u64;
-
-    thread::spawn(move || {
-        if delay_ms > 0 {
-            thread::sleep(Duration::from_millis(delay_ms));
-        }
-        if let Err(e) = play_sound_with_volume(sound_data, volume) {
-            eprintln!("Failed to play bell sound: {}", e);
-        }
-    });
+    // Create overlay windows - the first overlay will trigger the sound after bell_start_delay
+    create_overlay_windows(app, settings.opacity, settings.duration_seconds, settings.bell_start_delay);
 }
 
 /// Load the appropriate tray icon based on enabled state
@@ -420,9 +410,17 @@ fn show_overlay(app: AppHandle, state: tauri::State<'_, SettingsState>) -> Resul
     let settings = state.0.lock().map_err(|e| e.to_string())?;
     let opacity = settings.opacity;
     let duration = settings.duration_seconds;
+    let bell_delay = settings.bell_start_delay;
     drop(settings);
 
-    create_overlay_windows(&app, opacity, duration);
+    create_overlay_windows(&app, opacity, duration, bell_delay);
+    Ok(())
+}
+
+/// Trigger the bell with all settings (including delay) - used by Test Bell button
+#[tauri::command]
+fn trigger_test_bell(app: AppHandle) -> Result<(), String> {
+    trigger_bell(&app);
     Ok(())
 }
 
@@ -457,7 +455,7 @@ fn main() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(SettingsState(Mutex::new(Settings::default())))
-        .invoke_handler(tauri::generate_handler![get_settings, save_settings, play_bell, show_overlay, close_overlay_window])
+        .invoke_handler(tauri::generate_handler![get_settings, save_settings, play_bell, show_overlay, close_overlay_window, trigger_test_bell])
         .setup(|app| {
             // Load settings from store on startup
             let loaded_settings = load_settings_from_store(app.handle());

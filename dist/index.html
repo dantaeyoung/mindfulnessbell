@@ -407,7 +407,7 @@
                     <span class="setting-label">Duration</span>
                     <span class="setting-value" id="durationValue">3.0s</span>
                 </div>
-                <input type="range" id="duration" min="1" max="10" value="3" step="0.5">
+                <input type="range" id="duration" min="1" max="30" value="3" step="0.5">
             </div>
         </div>
         <div class="setting-group">
@@ -637,14 +637,10 @@
             debouncedSave();
         });
 
-        // Test Bell button - triggers both sound and overlay
+        // Test Bell button - triggers bell with all settings (including delay)
         testBellBtn.addEventListener('click', async () => {
             try {
-                // Trigger both sound and overlay in parallel
-                await Promise.all([
-                    invoke('play_bell'),
-                    invoke('show_overlay')
-                ]);
+                await invoke('trigger_test_bell');
                 showStatus('Bell triggered!', 'success');
             } catch (error) {
                 console.error('Failed to trigger bell:', error);

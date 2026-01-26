@@ -38,6 +38,8 @@
         const params = new URLSearchParams(window.location.search);
         const targetOpacity = parseFloat(params.get('opacity')) || 0.8;
         const totalDuration = parseFloat(params.get('duration')) || 3.0;
+        const bellDelay = parseFloat(params.get('bellDelay')) || 0;
+        const playSound = params.get('playSound') === 'true';
 
         // Split duration: 1/3 fade in, 1/3 hold, 1/3 fade out
         const fadeInDuration = totalDuration / 3;
@@ -53,6 +55,12 @@
 
         // Animation using requestAnimationFrame for smooth transitions
         function animate() {
+            // If this overlay should play sound, schedule it after the delay
+            if (playSound && window.__TAURI__) {
+                setTimeout(() => {
+                    window.__TAURI__.core.invoke('play_bell');
+                }, bellDelay * 1000);
+            }
             const startTime = performance.now();
             const fadeInMs = fadeInDuration * 1000;
             const holdMs = holdDuration * 1000;
