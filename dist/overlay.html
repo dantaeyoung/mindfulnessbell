@@ -72,9 +72,9 @@
                 } else {
                     // Animation complete - close the window
                     overlay.style.opacity = 0;
-                    // Notify Tauri to close this window
+                    // Close this window using Tauri's window API
                     if (window.__TAURI__) {
-                        window.__TAURI__.core.invoke('close_overlay_window');
+                        window.__TAURI__.window.getCurrentWindow().close();
                     }
                     return;
                 }
