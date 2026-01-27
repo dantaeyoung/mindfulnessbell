@@ -23,3 +23,8 @@ npm-debug.log*
 # Environment
 .env
 .env.local
+
+# Design mockups
+mockup-*.html
+figma-*.tsx
+figma-*.jsx
