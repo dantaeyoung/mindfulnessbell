@@ -1,5 +1,8 @@
 # Mindfulness Bell
 
+
+<img width="624" height="1145" alt="image" src="https://github.com/user-attachments/assets/195afa6f-f36f-4058-bcd4-94bebfed6cb0" />
+
 A lightweight macOS menu bar app that rings a bell and dims the screen at configurable intervals to encourage mindfulness breaks.
 
 ## Features
