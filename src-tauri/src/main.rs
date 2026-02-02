@@ -48,6 +48,8 @@ pub struct Settings {
     pub custom_sound_path: String,
     pub pause_media_on_bell: bool,
     pub resume_media_after_bell: bool,
+    pub sound_enabled: bool,
+    pub visual_enabled: bool,
 }
 
 impl Default for Settings {
@@ -64,6 +66,8 @@ impl Default for Settings {
             custom_sound_path: String::new(),
             pause_media_on_bell: false,
             resume_media_after_bell: false,
+            sound_enabled: true,
+            visual_enabled: true,
         }
     }
 }
@@ -108,6 +112,8 @@ fn save_settings(
     store.set("customSoundPath", settings.custom_sound_path.clone());
     store.set("pauseMediaOnBell", settings.pause_media_on_bell);
     store.set("resumeMediaAfterBell", settings.resume_media_after_bell);
+    store.set("soundEnabled", settings.sound_enabled);
+    store.set("visualEnabled", settings.visual_enabled);
     store.save().map_err(|e| e.to_string())?;
 
     // Restart the scheduler to pick up new settings
@@ -162,6 +168,12 @@ fn load_settings_from_store(app: &AppHandle) -> Settings {
         resume_media_after_bell: store.get("resumeMediaAfterBell")
             .and_then(|v| v.as_bool())
             .unwrap_or(false),
+        sound_enabled: store.get("soundEnabled")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true),
+        visual_enabled: store.get("visualEnabled")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true),
     }
 }
 
@@ -299,7 +311,7 @@ fn start_scheduler(app: AppHandle) {
 }
 
 /// Create overlay windows on all monitors with the given opacity, duration, and sound settings
-fn create_overlay_windows(app: &AppHandle, opacity: f64, duration: f64, bell_delay: f64) {
+fn create_overlay_windows(app: &AppHandle, opacity: f64, duration: f64, bell_delay: f64, sound_enabled: bool) {
     let monitors = match app.available_monitors() {
         Ok(m) => m,
         Err(e) => {
@@ -314,8 +326,8 @@ fn create_overlay_windows(app: &AppHandle, opacity: f64, duration: f64, bell_del
         let window_label = format!("overlay-{}", counter);
         let position = monitor.position();
         let size = monitor.size();
-        // Only the first overlay window triggers the sound to avoid multiple sounds
-        let play_sound = if is_first { "true" } else { "false" };
+        // Only the first overlay window triggers the sound (if sound is enabled)
+        let play_sound = if is_first && sound_enabled { "true" } else { "false" };
         is_first = false;
         let url = format!("overlay.html?opacity={}&duration={}&bellDelay={}&playSound={}", opacity, duration, bell_delay, play_sound);
 
@@ -347,6 +359,52 @@ fn create_overlay_windows(app: &AppHandle, opacity: f64, duration: f64, bell_del
                 eprintln!("Failed to create overlay window: {}", e);
             }
         }
+    }
+}
+
+/// Check if media is currently playing using MediaRemote framework
+fn is_media_playing() -> bool {
+    let swift_code = r#"
+import Foundation
+
+let bundle = CFBundleCreate(kCFAllocatorDefault, NSURL(fileURLWithPath: "/System/Library/PrivateFrameworks/MediaRemote.framework"))
+
+guard let MRMediaRemoteGetNowPlayingInfoPointer = CFBundleGetFunctionPointerForName(bundle, "MRMediaRemoteGetNowPlayingInfo" as CFString) else {
+    print("false")
+    exit(0)
+}
+
+typealias MRMediaRemoteGetNowPlayingInfoFunction = @convention(c) (DispatchQueue, @escaping ([String: Any]) -> Void) -> Void
+let MRMediaRemoteGetNowPlayingInfo = unsafeBitCast(MRMediaRemoteGetNowPlayingInfoPointer, to: MRMediaRemoteGetNowPlayingInfoFunction.self)
+
+var didPrint = false
+
+MRMediaRemoteGetNowPlayingInfo(DispatchQueue.main) { info in
+    if let rate = info["kMRMediaRemoteNowPlayingInfoPlaybackRate"] as? Double {
+        print(rate > 0 ? "true" : "false")
+    } else {
+        print("false")
+    }
+    didPrint = true
+    CFRunLoopStop(CFRunLoopGetMain())
+}
+
+// Run the loop to allow callback to execute
+RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.0))
+if !didPrint { print("false") }
+"#;
+
+    let output = std::process::Command::new("swift")
+        .arg("-e")
+        .arg(swift_code)
+        .output();
+
+    match output {
+        Ok(out) => {
+            let result = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            result == "true"
+        }
+        Err(_) => false,
     }
 }
 
@@ -417,13 +475,16 @@ fn trigger_bell(app: &AppHandle) {
         }
     };
 
-    // Pause media if enabled
-    if settings.pause_media_on_bell {
+    // Pause media if enabled and media is currently playing
+    let did_pause = if settings.pause_media_on_bell && is_media_playing() {
         send_media_key();
-    }
+        true
+    } else {
+        false
+    };
 
-    // Schedule media resume if enabled
-    if settings.pause_media_on_bell && settings.resume_media_after_bell {
+    // Schedule media resume if we actually paused something
+    if did_pause && settings.resume_media_after_bell {
         let duration = settings.duration_seconds;
         thread::spawn(move || {
             // Wait for the bell duration to complete
@@ -432,8 +493,27 @@ fn trigger_bell(app: &AppHandle) {
         });
     }
 
-    // Create overlay windows - the first overlay will trigger the sound after bell_start_delay
-    create_overlay_windows(app, settings.opacity, settings.duration_seconds, settings.bell_start_delay);
+    // Create overlay windows if visual is enabled
+    // Pass sound_enabled flag to control whether sound plays
+    if settings.visual_enabled {
+        create_overlay_windows(
+            app,
+            settings.opacity,
+            settings.duration_seconds,
+            settings.bell_start_delay,
+            settings.sound_enabled,
+        );
+    } else if settings.sound_enabled {
+        // No visual overlay, but sound is enabled - play sound directly
+        let volume = settings.volume as f32;
+        let custom_path = settings.custom_sound_path.clone();
+        let delay = settings.bell_start_delay;
+        thread::spawn(move || {
+            thread::sleep(Duration::from_secs_f64(delay));
+            let sound_data = load_sound_data(&custom_path);
+            let _ = play_sound_with_volume(sound_data, volume);
+        });
+    }
 }
 
 /// Load the appropriate tray icon based on enabled state
@@ -496,9 +576,10 @@ fn show_overlay(app: AppHandle, state: tauri::State<'_, SettingsState>) -> Resul
     let opacity = settings.opacity;
     let duration = settings.duration_seconds;
     let bell_delay = settings.bell_start_delay;
+    let sound_enabled = settings.sound_enabled;
     drop(settings);
 
-    create_overlay_windows(&app, opacity, duration, bell_delay);
+    create_overlay_windows(&app, opacity, duration, bell_delay, sound_enabled);
     Ok(())
 }
 
@@ -517,17 +598,14 @@ fn close_overlay_window(window: tauri::WebviewWindow) -> Result<(), String> {
 
 /// Open or focus the settings window
 fn open_settings_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("settings") {
-        // Bring existing window to front
+    let window = if let Some(window) = app.get_webview_window("settings") {
+        // Window exists, just show it
         let _ = window.unminimize();
         let _ = window.show();
-        // Use always_on_top trick to force window to front on macOS
-        let _ = window.set_always_on_top(true);
-        let _ = window.set_always_on_top(false);
-        let _ = window.set_focus();
+        window
     } else {
         // Create settings window if it doesn't exist
-        let _settings_window = tauri::WebviewWindowBuilder::new(
+        match tauri::WebviewWindowBuilder::new(
             app,
             "settings",
             tauri::WebviewUrl::App("index.html".into()),
@@ -535,8 +613,21 @@ fn open_settings_window(app: &AppHandle) {
         .title("Mindfulness Bell Settings")
         .inner_size(400.0, 620.0)
         .resizable(false)
-        .build();
-    }
+        .focused(true)
+        .build()
+        {
+            Ok(w) => w,
+            Err(e) => {
+                eprintln!("Failed to create settings window: {}", e);
+                return;
+            }
+        }
+    };
+
+    // Force window to front on macOS using always_on_top trick
+    let _ = window.set_always_on_top(true);
+    let _ = window.set_always_on_top(false);
+    let _ = window.set_focus();
 }
 
 fn main() {

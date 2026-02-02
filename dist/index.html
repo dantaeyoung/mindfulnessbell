@@ -445,6 +445,83 @@
 
         .section-content.disabled .slider-fill { background: var(--ink-faint); }
         .section-content.disabled .segment-btn.active { background: var(--ink-faint); }
+
+        /* Modal overlay */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(85, 85, 85, 0.4);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.visible {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--cream);
+            border: 1px solid var(--ink);
+            border-radius: 2px;
+            padding: 24px;
+            max-width: 320px;
+            width: 90%;
+        }
+
+        .modal-title {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 18px;
+            color: var(--ink);
+            margin-bottom: 12px;
+        }
+
+        .modal-body {
+            font-size: 11px;
+            line-height: 1.6;
+            color: var(--ink-light);
+            margin-bottom: 20px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .modal-btn {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 10px;
+            letter-spacing: 0.5px;
+            padding: 8px 16px;
+            border: 1px solid var(--ink);
+            border-radius: 2px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .modal-btn.cancel {
+            background: var(--cream);
+            color: var(--ink);
+        }
+
+        .modal-btn.cancel:hover {
+            background: var(--cream-dark);
+        }
+
+        .modal-btn.confirm {
+            background: var(--sage);
+            color: var(--cream);
+            border-color: var(--sage-dark);
+        }
+
+        .modal-btn.confirm:hover {
+            background: var(--sage-dark);
+        }
     </style>
 </head>
 <body>
@@ -495,6 +572,11 @@
         <!-- SOUND SECTION -->
         <div class="section" id="soundSection">
             <div class="section-content">
+                <!-- Sound Enabled Toggle -->
+                <div class="row enabled-row">
+                    <span class="row-label">Sound Enabled</span>
+                    <div class="toggle-switch on" id="soundEnabledToggle"></div>
+                </div>
                 <!-- Pause Media Toggle -->
                 <div class="row">
                     <span class="row-label">Pause media on bell</span>
@@ -537,6 +619,11 @@
         <!-- VISUAL SECTION -->
         <div class="section" id="visualSection">
             <div class="section-content">
+                <!-- Visual Enabled Toggle -->
+                <div class="row enabled-row">
+                    <span class="row-label">Visual Overlay Enabled</span>
+                    <div class="toggle-switch on" id="visualEnabledToggle"></div>
+                </div>
                 <!-- Opacity Slider -->
                 <div class="slider-row">
                     <div class="slider-header">
@@ -577,6 +664,21 @@
         <button class="test-button" id="testButton">Test the bell</button>
     </div>
 
+    <!-- Accessibility Permission Modal -->
+    <div class="modal-overlay" id="accessibilityModal">
+        <div class="modal">
+            <div class="modal-title">Accessibility Permission</div>
+            <div class="modal-body">
+                Pausing media requires macOS Accessibility access. When you first use this feature, macOS will ask you to grant permission in System Settings &gt; Privacy &amp; Security &gt; Accessibility.<br><br>
+                This is needed to send a system-wide play/pause key event.
+            </div>
+            <div class="modal-buttons">
+                <button class="modal-btn cancel" id="modalCancel">Cancel</button>
+                <button class="modal-btn confirm" id="modalConfirm">Enable</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Tauri API
         const { invoke } = window.__TAURI__.core;
@@ -594,7 +696,9 @@
             volume: 0.7,
             customSoundPath: '',
             pauseMediaOnBell: false,
-            resumeMediaAfterBell: false
+            resumeMediaAfterBell: false,
+            soundEnabled: true,
+            visualEnabled: true
         };
 
         // DOM elements
@@ -609,6 +713,8 @@
         const customSoundName = document.getElementById('customSoundName');
         const pauseMediaToggle = document.getElementById('pauseMediaToggle');
         const resumeMediaToggle = document.getElementById('resumeMediaToggle');
+        const soundEnabledToggle = document.getElementById('soundEnabledToggle');
+        const visualEnabledToggle = document.getElementById('visualEnabledToggle');
 
         // Debounced save
         let saveTimeout = null;
@@ -682,6 +788,14 @@
             // Pause media toggle
             pauseMediaToggle.classList.toggle('on', currentSettings.pauseMediaOnBell);
             resumeMediaToggle.classList.toggle('on', currentSettings.resumeMediaAfterBell);
+
+            // Sound enabled toggle
+            soundEnabledToggle.classList.toggle('on', currentSettings.soundEnabled);
+            updateSectionState(soundEnabledToggle);
+
+            // Visual enabled toggle
+            visualEnabledToggle.classList.toggle('on', currentSettings.visualEnabled);
+            updateSectionState(visualEnabledToggle);
 
             // Sound selection
             const hasCustomSound = currentSettings.customSoundPath && currentSettings.customSoundPath.length > 0;
@@ -818,10 +932,56 @@
             debouncedSave();
         });
 
-        // Pause media toggle
+        // Sound enabled toggle
+        soundEnabledToggle.addEventListener('click', () => {
+            soundEnabledToggle.classList.toggle('on');
+            currentSettings.soundEnabled = soundEnabledToggle.classList.contains('on');
+            updateSectionState(soundEnabledToggle);
+            debouncedSave();
+        });
+
+        // Visual enabled toggle
+        visualEnabledToggle.addEventListener('click', () => {
+            visualEnabledToggle.classList.toggle('on');
+            currentSettings.visualEnabled = visualEnabledToggle.classList.contains('on');
+            updateSectionState(visualEnabledToggle);
+            debouncedSave();
+        });
+
+        // Pause media toggle - show modal when enabling
+        const accessibilityModal = document.getElementById('accessibilityModal');
+        const modalCancel = document.getElementById('modalCancel');
+        const modalConfirm = document.getElementById('modalConfirm');
+
         pauseMediaToggle.addEventListener('click', () => {
-            pauseMediaToggle.classList.toggle('on');
-            currentSettings.pauseMediaOnBell = pauseMediaToggle.classList.contains('on');
+            if (!pauseMediaToggle.classList.contains('on')) {
+                // Turning ON - show explanation modal
+                accessibilityModal.classList.add('visible');
+            } else {
+                // Turning OFF - no modal needed
+                pauseMediaToggle.classList.remove('on');
+                currentSettings.pauseMediaOnBell = false;
+                // Also turn off resume if pause is off
+                resumeMediaToggle.classList.remove('on');
+                currentSettings.resumeMediaAfterBell = false;
+                debouncedSave();
+            }
+        });
+
+        modalCancel.addEventListener('click', () => {
+            accessibilityModal.classList.remove('visible');
+        });
+
+        accessibilityModal.addEventListener('click', (e) => {
+            if (e.target === accessibilityModal) {
+                accessibilityModal.classList.remove('visible');
+            }
+        });
+
+        modalConfirm.addEventListener('click', () => {
+            accessibilityModal.classList.remove('visible');
+            pauseMediaToggle.classList.add('on');
+            currentSettings.pauseMediaOnBell = true;
             debouncedSave();
         });
 
