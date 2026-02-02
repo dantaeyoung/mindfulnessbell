@@ -362,36 +362,27 @@ fn create_overlay_windows(app: &AppHandle, opacity: f64, duration: f64, bell_del
     }
 }
 
-/// Check if media is currently playing using MediaRemote framework
+
+/// Check if media is currently playing using MRMediaRemoteGetNowPlayingApplicationIsPlaying
 fn is_media_playing() -> bool {
     let swift_code = r#"
 import Foundation
 
 let bundle = CFBundleCreate(kCFAllocatorDefault, NSURL(fileURLWithPath: "/System/Library/PrivateFrameworks/MediaRemote.framework"))
 
-guard let MRMediaRemoteGetNowPlayingInfoPointer = CFBundleGetFunctionPointerForName(bundle, "MRMediaRemoteGetNowPlayingInfo" as CFString) else {
-    print("false")
-    exit(0)
-}
-
-typealias MRMediaRemoteGetNowPlayingInfoFunction = @convention(c) (DispatchQueue, @escaping ([String: Any]) -> Void) -> Void
-let MRMediaRemoteGetNowPlayingInfo = unsafeBitCast(MRMediaRemoteGetNowPlayingInfoPointer, to: MRMediaRemoteGetNowPlayingInfoFunction.self)
-
-var didPrint = false
-
-MRMediaRemoteGetNowPlayingInfo(DispatchQueue.main) { info in
-    if let rate = info["kMRMediaRemoteNowPlayingInfoPlaybackRate"] as? Double {
-        print(rate > 0 ? "true" : "false")
-    } else {
-        print("false")
+if let ptr = CFBundleGetFunctionPointerForName(bundle, "MRMediaRemoteGetNowPlayingApplicationIsPlaying" as CFString) {
+    typealias F = @convention(c) (DispatchQueue, @escaping (Bool) -> Void) -> Void
+    let fn = unsafeBitCast(ptr, to: F.self)
+    var result = false
+    fn(DispatchQueue.main) { isPlaying in
+        result = isPlaying
+        print(isPlaying ? "true" : "false")
+        CFRunLoopStop(CFRunLoopGetMain())
     }
-    didPrint = true
-    CFRunLoopStop(CFRunLoopGetMain())
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.0))
+} else {
+    print("false")
 }
-
-// Run the loop to allow callback to execute
-RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.0))
-if !didPrint { print("false") }
 "#;
 
     let output = std::process::Command::new("swift")
