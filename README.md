@@ -5,6 +5,12 @@
 
 A lightweight macOS menu bar app that rings a bell and dims the screen at configurable intervals to encourage mindfulness breaks.
 
+## Download
+
+**[Download latest release (macOS)](https://github.com/dantaeyoung/mindfulnessbell/releases/latest)**
+
+Unzip and drag to Applications. On first launch, macOS may ask you to allow the app in System Settings > Privacy & Security.
+
 ## Features
 
 - **Menu bar app** - Runs quietly in your menu bar with no dock icon

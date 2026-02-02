@@ -612,7 +612,8 @@ fn open_settings_window(app: &AppHandle) {
         )
         .title("Mindfulness Bell Settings")
         .inner_size(400.0, 620.0)
-        .resizable(false)
+        .min_inner_size(350.0, 500.0)
+        .resizable(true)
         .focused(true)
         .build()
         {
